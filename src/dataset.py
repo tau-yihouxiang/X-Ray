@@ -59,11 +59,11 @@ class DiffusionDataset(Dataset):
             depths = self.load_depths(depth_path)
 
             xray = torch.from_numpy(depths).float()[:self.num_frames]  # [8, 7, H, W]
-            # hit = (xray[:, 0:1] > 0).clone().float() * 2 - 1
+            hit = (xray[:, 0:1] > 0).clone().float() * 2 - 1
             xray[:, 0] = (xray[:, 0] - self.near) / (self.far - self.near) * 2 - 1 # (0-0.6) / (2.4 - 0.6) = -0.3333
             xray[:, 1:4] = F.normalize(xray[:, 1:4], dim=1)
             xray[:, 4:7] = xray[:, 4:7] * 2 - 1
-            xray = torch.cat([xray[:, 0:1], xray[:, 4:7]], dim=1)
+            xray = torch.cat([xray, hit], dim=1)
             
             sample["xray"] = torch.nn.functional.interpolate(xray, size=(self.size // 8, self.size // 8), mode="nearest")
             

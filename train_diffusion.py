@@ -594,6 +594,9 @@ def main():
     # If passed along, set the training seed now.
     if args.seed is not None:
         set_seed(args.seed)
+    
+    global_step = 0
+    first_epoch = 0
 
     # Handle the repository creation
     if accelerator.is_main_process:
@@ -616,10 +619,9 @@ def main():
     )
     vae = AutoencoderKLTemporalDecoder.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision, variant="fp16")
-    
-    unet = UNetSpatioTemporalConditionModel.from_pretrained(
-        args.pretrained_model_name_or_path if args.pretrain_unet is None else args.pretrain_unet,
-        subfolder="unet",
+
+    unet = UNetSpatioTemporalConditionModel.from_config(
+        "src/xray_unet.json",
         low_cpu_mem_usage=True,
         variant="fp16",
     )
@@ -627,7 +629,6 @@ def main():
     # Freeze vae and image_encoder
     vae.requires_grad_(False)
     image_encoder.requires_grad_(False)
-    # unet.requires_grad_(False)
 
     # For mixed precision training we cast the text_encoder and vae weights to half-precision
     # as these models are only used for inference, keeping weights in full precision is not required.
@@ -799,8 +800,6 @@ def main():
     logger.info(
         f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
     logger.info(f"  Total optimization steps = {args.max_train_steps}")
-    global_step = 0
-    first_epoch = 0
 
     def encode_image(pixel_values):
         # pixel: [-1, 1]
@@ -863,12 +862,9 @@ def main():
             args.resume_from_checkpoint = None
         else:
             accelerator.print(f"Resuming from checkpoint {path}")
-            # accelerator.load_state(os.path.join(args.output_dir, path))
+            accelerator.load_state(os.path.join(args.output_dir, path))
             global_step = int(path.split("-")[1])
-
-            resume_global_step = global_step * args.gradient_accumulation_steps
             first_epoch = global_step // num_update_steps_per_epoch
-            resume_step = resume_global_step
 
     # Only show the progress bar once on each machine.
     progress_bar = tqdm(range(global_step, args.max_train_steps),
@@ -893,8 +889,8 @@ def main():
                 if global_step % 50 == 0 and accelerator.is_main_process:
                     os.makedirs(os.path.join(args.output_dir, "samples"), exist_ok=True)
                     torchvision.utils.save_image(xray[0, :, 0:1], os.path.join(args.output_dir, "samples", "depths.png"), normalize=True, nrow=4)
-                    torchvision.utils.save_image(xray[0, :, 1:4], os.path.join(args.output_dir, "samples", "colors.png"), normalize=True, nrow=4)
-                    # torchvision.utils.save_image(xray[0, :, 4:7], os.path.join(args.output_dir, "samples", "colors.png"), normalize=True, nrow=4)
+                    torchvision.utils.save_image(xray[0, :, 1:4], os.path.join(args.output_dir, "samples", "normals.png"), normalize=True, nrow=4)
+                    torchvision.utils.save_image(xray[0, :, 4:7], os.path.join(args.output_dir, "samples", "colors.png"), normalize=True, nrow=4)
                     torchvision.utils.save_image(conditional_pixel_values[0:1], os.path.join(args.output_dir, "samples", "images.png"), normalize=True)
                     visual = torch.nn.functional.interpolate(xray[0, :1, :1], (args.height, args.width))
                     visual = visual.clip(-1, 1)
@@ -1037,9 +1033,9 @@ def main():
                                     shutil.rmtree(removing_checkpoint)
 
                         save_path = os.path.join(
-                            args.output_dir, f"checkpoint-{global_step}", "unet")
-                        # accelerator.save_state(save_path)
-                        accelerator.unwrap_model(unet).save_pretrained(save_path, variant="fp16")
+                            args.output_dir, f"checkpoint-{global_step}")
+                        accelerator.save_state(save_path)
+                        # accelerator.unwrap_model(unet).save_pretrained(save_path, variant="fp16")
 
                         logger.info(f"Saved state to {save_path}")
                     # sample images!
@@ -1099,13 +1095,15 @@ def main():
                                 # save the generated images
                                 outputs = outputs.clip(-1, 1)
                                 torchvision.utils.save_image(outputs[:, 0:1], f"{val_save_dir}/step_{global_step}_val_img_{val_img_idx}_depths.png", normalize=True, nrow=4)
-                                torchvision.utils.save_image(outputs[:, 1:4], f"{val_save_dir}/step_{global_step}_val_img_{val_img_idx}_colors.png", normalize=True, nrow=4)
-                                # torchvision.utils.save_image(outputs[:, 4:7], f"{val_save_dir}/step_{global_step}_val_img_{val_img_idx}_colors.png", normalize=True, nrow=4)
+                                torchvision.utils.save_image(outputs[:, 1:4], f"{val_save_dir}/step_{global_step}_val_img_{val_img_idx}_normals.png", normalize=True, nrow=4)
+                                torchvision.utils.save_image(outputs[:, 4:7], f"{val_save_dir}/step_{global_step}_val_img_{val_img_idx}_colors.png", normalize=True, nrow=4)
+                                GenHits = outputs[:, -1:].cpu().numpy()
                                 GenDepths = (outputs[:, 0:1].cpu().numpy() * 0.5 + 0.5) * (args.far - args.near) + args.near
+                                GenDepths[GenHits < 0] = 0
                                 GenDepths[GenDepths <= args.near] = 0
                                 GenDepths[GenDepths >= args.far] = 0
                                 GenNormals = F.normalize(outputs[:, 1:4], dim=1).cpu().numpy()
-                                GenColors = outputs[:, 1:4].cpu().numpy() * 0.5 + 0.5
+                                GenColors = outputs[:, 4:7].cpu().numpy() * 0.5 + 0.5
                                 gen_pts, gen_normals, gen_colors = depth_to_pcd_normals(GenDepths, GenNormals, GenColors)
                                 pcd = o3d.geometry.PointCloud()
                                 pcd.points = o3d.utility.Vector3dVector(gen_pts)

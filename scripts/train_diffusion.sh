@@ -1,7 +1,7 @@
 #/bin/bash
 
 export MODEL_NAME="stabilityai/stable-video-diffusion-img2vid"
-export OUTPUT_DIR="Output/Objaverse_80K_finetune"
+export OUTPUT_DIR="Output/Objaverse_80K_diffusion"
 export INSTANCE_DIR="Data/Objaverse_XRay"
 export NUM_GPUS=4
 
@@ -17,7 +17,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 accelerate launch \
     --height=512 \
     --num_frames=8 \
     --checkpointing_steps=1000 --checkpoints_total_limit=3 \
-    --learning_rate=1e-5 --lr_warmup_steps=0 \
+    --learning_rate=1e-4 --lr_warmup_steps=0 \
     --seed=123 \
     --num_workers=6 \
     --validation_steps=1000 \

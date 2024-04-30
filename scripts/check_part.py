@@ -2,16 +2,14 @@ import glob
 import os
 import imageio
 import numpy as np
-import tqdm
-import PIL
 from PIL import Image
-import time
 import random
 from scipy.sparse import csr_matrix
 import torch
 import torch.nn.functional as F
 import open3d as o3d
 import torchvision
+import shutil
 
 def get_rays(directions, c2w):
     # Rotate ray directions from camera coordinate to the world coordinate
@@ -42,10 +40,6 @@ def depth_to_pcd_normals(GenDepths, GenNormals, GenColors):
 
     directions = np.stack([(i-cx)/fx, -(j-cy)/fx, -np.ones_like(i)], -1) # (H, W, 3)
 
-    # c2w = np.array([[0, 0, 0, 1.5],
-    #             [0, 0, 0, 0],
-    #             [0, 1, 0, 0],
-    #             [0.0, 0.0, 0.0, 1.0]])
     c2w = np.eye(4).astype(np.float32)
 
     rays_origins, ray_directions = get_rays(directions, c2w)
@@ -76,9 +70,9 @@ def load_depths( depths_path):
 	restored_array = loaded_sparse_matrix.toarray().reshape(original_shape)
 	return restored_array
 
-instance_data_root = "Data/Objaverse_XRay/depths"
+instance_data_root = "Data/ShapeNet_Car/depths"
 
-depths_paths = glob.glob(os.path.join(instance_data_root, "*/*.npz"))
+depths_paths = glob.glob(os.path.join(instance_data_root, "*/*/*.npz"))
 # shuffle
 random.shuffle(depths_paths)
 
@@ -101,13 +95,26 @@ for depth_path in depths_paths:
     image_path = depth_path.replace("depths", "images").replace("npz", "png")
     image = Image.open(image_path)
     image.save("Output/image.png")
-    
+
     gen_pts, gen_normals, gen_colors = depth_to_pcd_normals(GenDepths, GenNormals, GenColors)
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(gen_pts)
     pcd.normals = o3d.utility.Vector3dVector(gen_normals)
     pcd.colors = o3d.utility.Vector3dVector(gen_colors)
     o3d.io.write_point_cloud("Output/gt.ply", pcd)
+    
+    # remove path "Output/parts"
+    shutil.rmtree("Output/parts", ignore_errors=True)
+    os.makedirs("Output/parts", exist_ok=True)
+    for i in range(16):
+        gen_pts, gen_normals, gen_colors = depth_to_pcd_normals(GenDepths[i:i+1], GenNormals[i:i+1], GenColors[i:i+1])
+        if len(gen_pts) == 0:
+            continue
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(gen_pts)
+        pcd.normals = o3d.utility.Vector3dVector(gen_normals)
+        pcd.colors = o3d.utility.Vector3dVector(gen_colors)
+        o3d.io.write_point_cloud(f"Output/parts/part_{i:02d}.ply", pcd)
 
     # save GenDepths, GenNormals, GenColors as a sequential video
     GenDepths = GenDepths / (far - near)
@@ -141,8 +148,4 @@ for depth_path in depths_paths:
 
     GenXRay = np.concatenate([white_image, GenHits, GenDepths, GenNormals, GenColors], axis=2)
     imageio.mimsave('Output/xray.gif', GenXRay, loop=1024, format='GIF', fps=1)  # 'duration' controls the frame timing in seconds
-    # imageio.mimsave('Output/hits.gif', GenHits, format='GIF', fps=2)  # 'duration' controls the frame timing in seconds
-    # imageio.mimsave('Output/depths.gif', GenDepths, format='GIF', fps=2)  # 'duration' controls the frame timing in seconds
-    # imageio.mimsave('Output/normals.gif', GenNormals, format='GIF', fps=2)  # 'duration' controls the frame timing in seconds
-    # imageio.mimsave('Output/colors.gif', GenColors, format='GIF', fps=2)  # 'duration' controls the frame timing in seconds
     import pdb; pdb.set_trace()

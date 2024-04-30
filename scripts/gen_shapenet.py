@@ -176,17 +176,7 @@ def process_model(model_path):
         
         for frame in (meta["frames"]):
             # save image
-            # PIL.Image.open(os.path.join(img_dir, cate_id, obj_id, frame["file_path"])).save("Output/image.png")
-
             c2w = np.array(frame["c2w"])
-
-            # mesh.export("Output/gt.ply")
-            # # save camera center as a point to ply
-            # camera_center = c2w[:3, 3]
-            # camera_center = camera_center.reshape(1, 3)
-            # pcd = o3d.geometry.PointCloud()
-            # pcd.points = o3d.utility.Vector3dVector(camera_center)
-            # o3d.io.write_point_cloud("Output/camera_center.ply", pcd)
 
             Rt = np.linalg.inv(c2w)
             mesh_frame = mesh.copy().apply_transform(Rt)
@@ -232,10 +222,6 @@ def process_model(model_path):
                         GenDepths[i, 1:4, u, v] = ray_normals[ray_index][i]
                         GenDepths[i, 4:7, u, v] = ray_colors[ray_index][i]
             
-            # torchvision.utils.save_image(torch.tensor(GenDepths[:, 0:1]), "Output/depths.png", nrow=4)
-            # torchvision.utils.save_image(torch.tensor(GenDepths[:, 1:4] * 0.5 + 0.5), "Output/normals.png", nrow=4)
-            # torchvision.utils.save_image(torch.tensor(GenDepths[:, 4:7]), "Output/colors.png", nrow=4)
-
             GenDepths = GenDepths.astype(np.float16)
             # save GenDepths as a npy file
             os.makedirs(os.path.join(depth_dir, cate_id, obj_id), exist_ok=True)
