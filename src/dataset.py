@@ -58,7 +58,7 @@ class DiffusionDataset(Dataset):
             depth_path = xray_path
             depths = self.load_depths(depth_path)
 
-            xray = torch.from_numpy(depths).float()[:self.num_frames]  # [8, 7, H, W]
+            xray = torch.from_numpy(depths.copy()).float()[:self.num_frames]  # [8, 7, H, W]
             hit = (xray[:, 0:1] > 0).clone().float() * 2 - 1
             xray[:, 0] = (xray[:, 0] - self.near) / (self.far - self.near) * 2 - 1 # (0-0.6) / (2.4 - 0.6) = -0.3333
             xray[:, 1:4] = F.normalize(xray[:, 1:4], dim=1)
@@ -69,6 +69,14 @@ class DiffusionDataset(Dataset):
             
             # read condition image
             image_values_pil = Image.open(depth_path.replace("depths", "images").replace(".npz", ".png"))
+            
+            # filter
+            _, _, _, mask = image_values_pil.split()
+            depth = (depths[0, 0] > 0).astype(np.float32)
+            mask = (np.array(mask.resize(depth.shape)) / 255 > 0.5).astype(np.float32)
+            iou = (mask * depth).sum() / np.maximum(mask, depth).sum()
+            assert iou > 0.7, f"iou: {iou}"
+
             image_values_pil = image_values_pil.convert("RGB")
             image_values = image_values_pil.resize((self.size, self.size), Image.BILINEAR)
             image_values = torchvision.transforms.ToTensor()(image_values) * 2 - 1
@@ -127,7 +135,7 @@ class UpsamplerDataset(Dataset):
             # depth_path = xray_path.replace("xrays", "depths")
             depths = self.load_depths(depth_path)
 
-            xray = torch.from_numpy(depths).float()[:self.num_frames]  # [8, 7, H, W]
+            xray = torch.from_numpy(depths.copy()).float()[:self.num_frames]  # [8, 7, H, W]
             hit = (xray[:, 0:1] > 0).clone().float() * 2 - 1
             xray[:, 0] = (xray[:, 0] - self.near) / (self.far - self.near) * 2 - 1 # (0-0.6) / (2.4 - 0.6) = -0.3333
             xray[:, 1:4] = F.normalize(xray[:, 1:4], dim=1)
@@ -141,6 +149,14 @@ class UpsamplerDataset(Dataset):
 
             # read condition image
             image_values_pil = Image.open(depth_path.replace("depths", "images").replace(".npz", ".png"))
+            
+            # filter
+            _, _, _, mask = image_values_pil.split()
+            depth = (depths[0, 0] > 0).astype(np.float32)
+            mask = (np.array(mask.resize(depth.shape)) / 255 > 0.5).astype(np.float32)
+            iou = (mask * depth).sum() / np.maximum(mask, depth).sum()
+            assert iou > 0.7, f"iou: {iou}"
+
             image_values_pil = image_values_pil.convert("RGB")
             image_values = image_values_pil.resize((self.size * 2, self.size * 2), Image.BILINEAR)
             image_values = torchvision.transforms.ToTensor()(image_values) * 2 - 1

@@ -1,4 +1,5 @@
 import glob
+import shutil
 import PIL
 import numpy as np
 from trimesh.ray.ray_pyembree import RayMeshIntersector
@@ -175,11 +176,20 @@ def process_model(model_path):
         raycast = RaycastingImaging()
         
         for frame in (meta["frames"]):
+            os.makedirs(os.path.join(depth_dir, cate_id, obj_id), exist_ok=True)
             # save image
             c2w = np.array(frame["c2w"])
 
             Rt = np.linalg.inv(c2w)
             mesh_frame = mesh.copy().apply_transform(Rt)
+
+            # # export mesh as ply using trimesh
+            # mesh_frame.export(os.path.join(depth_dir, cate_id, obj_id, frame["file_path"][:-4] + ".ply"))
+            # # copy image
+            # shutil.copy(os.path.join(img_dir, cate_id, obj_id, frame["file_path"]), os.path.join(depth_dir, cate_id, obj_id))
+            # import pdb; pdb.set_trace()
+            # break
+
             c2w = np.eye(4).astype(np.float32)[:3]
 
             camera_angle_x = float(meta["camera_angle_x"])
@@ -224,7 +234,6 @@ def process_model(model_path):
             
             GenDepths = GenDepths.astype(np.float16)
             # save GenDepths as a npy file
-            os.makedirs(os.path.join(depth_dir, cate_id, obj_id), exist_ok=True)
             sparse_matrix = csr_matrix(GenDepths.reshape(16, -1))
             
             np.savez_compressed(os.path.join(depth_dir, cate_id, obj_id, frame["file_path"][:-4]), 

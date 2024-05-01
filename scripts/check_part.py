@@ -10,6 +10,46 @@ import torch.nn.functional as F
 import open3d as o3d
 import torchvision
 import shutil
+import trimesh
+
+def create_arrow(start, end, shaft_diameter=0.002, head_diameter=0.01, head_length=0.02):
+    # Vector from start to end
+    direction = np.array(end) - np.array(start)
+    arrow_length = np.linalg.norm(direction)
+    direction = direction / arrow_length  # Normalize the direction vector
+
+    # Create the shaft of the arrow
+    shaft_length = arrow_length 
+    shaft = trimesh.creation.cylinder(radius=shaft_diameter / 2, height=shaft_length,
+                                      sections=32, transform=None)
+
+    # Create the head of the arrow
+    head = trimesh.creation.cone(radius=head_diameter / 2, height=head_length,
+                                 sections=32, transform=None)
+
+    # Position the shaft
+    shaft_transform = trimesh.transformations.translation_matrix(start + direction * shaft_length / 2)
+    shaft_transform = np.dot(shaft_transform, trimesh.transformations.rotation_matrix(
+        angle=np.arccos(np.dot([0, 0, 1], direction)),
+        direction=np.cross([0, 0, 1], direction),
+        point=[0, 0, 0]))
+    shaft.apply_transform(shaft_transform)
+
+    # Position the head
+    head_transform = trimesh.transformations.translation_matrix(start + direction * (arrow_length - head_length / 2))
+    head_transform = np.dot(head_transform, trimesh.transformations.rotation_matrix(
+        angle=np.arccos(np.dot([0, 0, 1], direction)),
+        direction=np.cross([0, 0, 1], direction),
+        point=[0, 0, 0]))
+    head.apply_transform(head_transform)
+
+    # Combine shaft and head to form the arrow
+    arrow_mesh = shaft + head
+
+    # Set the color of the arrow to #d1923f
+    arrow_mesh.visual.face_colors = [209, 146, 63, 64]
+    return arrow_mesh
+
 
 def get_rays(directions, c2w):
     # Rotate ray directions from camera coordinate to the world coordinate
@@ -66,11 +106,11 @@ def load_depths( depths_path):
 
 	loaded_sparse_matrix = csr_matrix((loaded_data['data'], loaded_data['indices'], loaded_data['indptr']), shape=loaded_data['shape'])
 
-	original_shape = (16, 7, 256, 256)
+	original_shape = (16, 7, 1024, 1024)
 	restored_array = loaded_sparse_matrix.toarray().reshape(original_shape)
 	return restored_array
 
-instance_data_root = "Data/ShapeNet_Car/depths"
+instance_data_root = "Data/ShapeNet_Car/depths_1024"
 
 depths_paths = glob.glob(os.path.join(instance_data_root, "*/*/*.npz"))
 # shuffle
@@ -87,12 +127,21 @@ for depth_path in depths_paths:
     GenNormals = GenNormals / (np.linalg.norm(GenNormals, axis=1, keepdims=True) + 1e-8)
     GenColors = depths[:, 4:7]
 
-    torchvision.utils.save_image(torch.tensor((GenDepths - near) / (far - near)), "Output/depths.png", nrow=4)
-    torchvision.utils.save_image(torch.tensor(GenNormals * 0.5 + 0.5), "Output/normals.png", nrow=4)
-    torchvision.utils.save_image(torch.tensor(GenColors), "Output/colors.png", nrow=4)
+    # vis
+    nohit = GenDepths == 0
+    D = GenDepths.copy()
+    D[nohit] = (far + near) / 2
+    N = GenNormals.copy()
+    N[nohit.repeat(3, 1)] = 0
+    C = GenColors.copy()
+    C[nohit.repeat(3, 1)] = 0.5
+
+    torchvision.utils.save_image(torch.tensor((D - near) / (far - near)), "Output/depths.png", nrow=16, padding=0)
+    torchvision.utils.save_image(torch.tensor(N * 0.5 + 0.5), "Output/normals.png", nrow=16, padding=0)
+    torchvision.utils.save_image(torch.tensor(C), "Output/colors.png", nrow=16, padding=0)
 
     # save image
-    image_path = depth_path.replace("depths", "images").replace("npz", "png")
+    image_path = depth_path.replace("depths_1024", "images").replace("npz", "png")
     image = Image.open(image_path)
     image.save("Output/image.png")
 
@@ -102,10 +151,10 @@ for depth_path in depths_paths:
     pcd.normals = o3d.utility.Vector3dVector(gen_normals)
     pcd.colors = o3d.utility.Vector3dVector(gen_colors)
     o3d.io.write_point_cloud("Output/gt.ply", pcd)
-    
-    # remove path "Output/parts"
-    shutil.rmtree("Output/parts", ignore_errors=True)
+
+    shutil.rmtree("Output/parts")
     os.makedirs("Output/parts", exist_ok=True)
+    
     for i in range(16):
         gen_pts, gen_normals, gen_colors = depth_to_pcd_normals(GenDepths[i:i+1], GenNormals[i:i+1], GenColors[i:i+1])
         if len(gen_pts) == 0:
@@ -114,7 +163,27 @@ for depth_path in depths_paths:
         pcd.points = o3d.utility.Vector3dVector(gen_pts)
         pcd.normals = o3d.utility.Vector3dVector(gen_normals)
         pcd.colors = o3d.utility.Vector3dVector(gen_colors)
-        o3d.io.write_point_cloud(f"Output/parts/part_{i:02d}.ply", pcd)
+        # export the point cloud to a ply file
+        o3d.io.write_point_cloud(f"Output/parts/{i:02d}_object.ply", pcd)
+
+        # create arrow that point to the pcd.points
+        arrow_trimesh = []
+        # random choise 100 points to create the arrow
+        if len(gen_pts) > 50:
+            idx = np.random.choice(len(gen_pts), 50, replace=False)
+        else:
+            idx = np.arange(len(gen_pts))
+        for j in idx:
+            arrow_trimesh += [create_arrow([0, 0, 0], gen_pts[j])]
+        arrow_trimesh = trimesh.util.concatenate(arrow_trimesh)
+        # export the arrow to a ply file
+        arrow_trimesh.export(f"Output/parts/{i:02d}_arrow.ply")
+
+    # merged_pcd.colors = o3d.utility.Vector3dVector(np.asarray(merged_pcd.normals) * 0.5 + 0.5)
+    # o3d.io.write_point_cloud("Output/merged_normal.ply", merged_pcd)
+
+    # merged_pcd.colors = o3d.utility.Vector3dVector(np.asarray(merged_pcd.colors) * 0.0 + 1.0)
+    # o3d.io.write_point_cloud("Output/merged_depth.ply", merged_pcd)
 
     # save GenDepths, GenNormals, GenColors as a sequential video
     GenDepths = GenDepths / (far - near)
@@ -138,7 +207,7 @@ for depth_path in depths_paths:
     GenHits[GenHits == 0] = 128 
 
     # convert image background to white
-    image = image.resize((256, 256))
+    image = image.resize((1024, 1024))
     white_image = Image.new("RGB", image.size, (128, 128, 128))
     # paste the image on the white background
     white_image.paste(image, mask=image.split()[3])  
