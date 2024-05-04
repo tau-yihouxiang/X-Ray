@@ -6,7 +6,6 @@ export INSTANCE_DIR="Data/Objaverse_XRay"
 export NUM_GPUS=2
 
 CUDA_VISIBLE_DEVICES=0,1 accelerate launch \
-    --config_file="scripts/multigpu_config.yaml" \
     --main_process_port=29500 --num_processes=${NUM_GPUS} train_upsampler.py \
     --pretrained_model_name_or_path=${MODEL_NAME} \
     --data_root=${INSTANCE_DIR} \

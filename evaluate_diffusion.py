@@ -68,11 +68,8 @@ def depth_to_pcd_normals(GenDepths, GenNormals, GenColors):
 
 
 def load_depths(depths_path):
-    # 加载稀疏矩阵数据
     loaded_data = np.load(depths_path)
-    # 从加载的数据中获取稀疏矩阵的组成部分
     loaded_sparse_matrix = csr_matrix((loaded_data['data'], loaded_data['indices'], loaded_data['indptr']), shape=loaded_data['shape'])
-    # 将稀疏矩阵还原为原始形状
     original_shape = (16, 1+3+3, 256, 256)
     restored_array = loaded_sparse_matrix.toarray().reshape(original_shape)
     return restored_array
@@ -80,9 +77,9 @@ def load_depths(depths_path):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("SVD Depth Inference")
-    parser.add_argument("--exp", type=str, default="Objaverse_80K_fromscratch_R64", help="experiment name")
+    parser.add_argument("--exp", type=str, default="ShapeNet_Car", help="experiment name")
     parser.add_argument("--model_id", type=str, default="stabilityai/stable-video-diffusion-img2vid")
-    parser.add_argument("--data_root", type=str, default="Data/Objaverse_XRay/depths", help="data root")
+    parser.add_argument("--data_root", type=str, default="Data/ShapeNet_Car/depths", help="data root")
     args = parser.parse_args()
 
     near = 0.6
@@ -106,14 +103,13 @@ if __name__ == "__main__":
             f"Output/{exp_name}/{ckpt_name}",
             subfolder="unet",
             torch_dtype=torch.float16,
-            variant="fp16",
         ).to("cuda")
 
     height = 512
     width = 512
     prompt = ""
 
-    xray_paths = glob.glob(os.path.join(xray_root, "*/*.npz"))
+    xray_paths = glob.glob(os.path.join(xray_root, "**/*.npz"), recursive=True)
     image_paths = [x.replace("depths", "images").replace(".npz", ".png") for x in xray_paths]
     sorted(image_paths)
     image_paths = image_paths[::10] # test set
@@ -124,7 +120,8 @@ if __name__ == "__main__":
     os.makedirs(f"Output/{exp_name}/evaluate", exist_ok=True)
 
     all_chamfer_distance = []
-    for i in tqdm(range(len(image_paths))):
+    progress_bar =  tqdm(range(len(image_paths)))
+    for i in progress_bar:
         image_path = image_paths[i]
         uid = image_path.split("/")[-2]
 
@@ -174,7 +171,9 @@ if __name__ == "__main__":
         o3d.io.write_point_cloud(f"Output/{exp_name}/evaluate/{uid}_gt.ply", pcd)
 
         chamfer_distance = compute_trimesh_chamfer(gt_pts, gen_pts)
-        all_chamfer_distance += [chamfer_distance]
-        tqdm.write(f"chamfer distance: {chamfer_distance}")
+        # if not nan
+        if chamfer_distance == chamfer_distance:
+            all_chamfer_distance += [chamfer_distance]
+            progress_bar.set_postfix({"chamfer_distance": np.mean(all_chamfer_distance)})
+            progress_bar.update(1)
         
-    print(f"step: average chamfer distance: {np.mean(all_chamfer_distance)}")

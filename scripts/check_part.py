@@ -169,8 +169,8 @@ for depth_path in depths_paths:
         # create arrow that point to the pcd.points
         arrow_trimesh = []
         # random choise 100 points to create the arrow
-        if len(gen_pts) > 50:
-            idx = np.random.choice(len(gen_pts), 50, replace=False)
+        if len(gen_pts) > 100:
+            idx = np.random.choice(len(gen_pts), 100, replace=False)
         else:
             idx = np.arange(len(gen_pts))
         for j in idx:
