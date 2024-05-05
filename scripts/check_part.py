@@ -12,7 +12,7 @@ import torchvision
 import shutil
 import trimesh
 
-def create_arrow(start, end, shaft_diameter=0.002, head_diameter=0.01, head_length=0.02):
+def create_arrow(start, end, shaft_diameter=0.0005, head_diameter=0.01, head_length=0.02):
     # Vector from start to end
     direction = np.array(end) - np.array(start)
     arrow_length = np.linalg.norm(direction)
@@ -106,13 +106,13 @@ def load_depths( depths_path):
 
 	loaded_sparse_matrix = csr_matrix((loaded_data['data'], loaded_data['indices'], loaded_data['indptr']), shape=loaded_data['shape'])
 
-	original_shape = (16, 7, 1024, 1024)
+	original_shape = (16, 7, 256, 256)
 	restored_array = loaded_sparse_matrix.toarray().reshape(original_shape)
 	return restored_array
 
-instance_data_root = "Data/ShapeNet_Car/depths_1024"
+instance_data_root = "Data/Objaverse_XRay/depths"
 
-depths_paths = glob.glob(os.path.join(instance_data_root, "*/*/*.npz"))
+depths_paths = glob.glob(os.path.join(instance_data_root, "**/*.npz"), recursive=True)
 # shuffle
 random.shuffle(depths_paths)
 
@@ -120,6 +120,7 @@ near = 0.6
 far = 2.4
 
 for depth_path in depths_paths:
+    depth_path = "Data/Objaverse_XRay/depths/690b5725419e4b05938f9a00ce818e78/001.npz"
     print(depth_path)
     depths = load_depths(depth_path)
     GenDepths = depths[:, 0:1]
@@ -141,7 +142,7 @@ for depth_path in depths_paths:
     torchvision.utils.save_image(torch.tensor(C), "Output/colors.png", nrow=16, padding=0)
 
     # save image
-    image_path = depth_path.replace("depths_1024", "images").replace("npz", "png")
+    image_path = depth_path.replace("depths", "images").replace("npz", "png")
     image = Image.open(image_path)
     image.save("Output/image.png")
 
@@ -174,7 +175,7 @@ for depth_path in depths_paths:
         else:
             idx = np.arange(len(gen_pts))
         for j in idx:
-            arrow_trimesh += [create_arrow([0, 0, 0], gen_pts[j])]
+            arrow_trimesh += [create_arrow([0, 0, -0.5], gen_pts[j])]
         arrow_trimesh = trimesh.util.concatenate(arrow_trimesh)
         # export the arrow to a ply file
         arrow_trimesh.export(f"Output/parts/{i:02d}_arrow.ply")
@@ -207,7 +208,7 @@ for depth_path in depths_paths:
     GenHits[GenHits == 0] = 128 
 
     # convert image background to white
-    image = image.resize((1024, 1024))
+    image = image.resize((256, 256))
     white_image = Image.new("RGB", image.size, (128, 128, 128))
     # paste the image on the white background
     white_image.paste(image, mask=image.split()[3])  
@@ -216,5 +217,5 @@ for depth_path in depths_paths:
     white_image = white_image[None].repeat(GenHits.shape[0], 0)
 
     GenXRay = np.concatenate([white_image, GenHits, GenDepths, GenNormals, GenColors], axis=2)
-    imageio.mimsave('Output/xray.gif', GenXRay, loop=1024, format='GIF', fps=1)  # 'duration' controls the frame timing in seconds
+    imageio.mimsave('Output/xray.gif', GenXRay, loop=256, format='GIF', fps=1)  # 'duration' controls the frame timing in seconds
     import pdb; pdb.set_trace()
