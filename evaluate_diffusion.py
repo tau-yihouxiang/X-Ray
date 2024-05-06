@@ -161,7 +161,7 @@ if __name__ == "__main__":
         xray = load_depths(gt_path)[:8]
         GtDepths = xray[:, 0:1]
         GtNormals = xray[:, 1:4]
-        GtColors = xray[:, 4:7] * 0.5 + 0.5
+        GtColors = xray[:, 4:7]
         gt_pts, gt_normals, gt_colors = depth_to_pcd_normals(GtDepths, GtNormals, GtColors)
         gt_pts[:, 2] += 1.5
         pcd = o3d.geometry.PointCloud()
