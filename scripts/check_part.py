@@ -137,24 +137,26 @@ for depth_path in depths_paths:
     C = GenColors.copy()
     C[nohit.repeat(3, 1)] = 0.5
 
-    torchvision.utils.save_image(torch.tensor((D - near) / (far - near)), "Output/depths.png", nrow=16, padding=0)
-    torchvision.utils.save_image(torch.tensor(N * 0.5 + 0.5), "Output/normals.png", nrow=16, padding=0)
-    torchvision.utils.save_image(torch.tensor(C), "Output/colors.png", nrow=16, padding=0)
+    os.makedirs("logs", exist_ok=True)
+    os.makedirs("logs/parts", exist_ok=True)
+    torchvision.utils.save_image(torch.tensor((D - near) / (far - near)), "logs/depths.png", nrow=16, padding=0)
+    torchvision.utils.save_image(torch.tensor(N * 0.5 + 0.5), "logs/normals.png", nrow=16, padding=0)
+    torchvision.utils.save_image(torch.tensor(C), "logs/colors.png", nrow=16, padding=0)
 
     # save image
     image_path = depth_path.replace("depths", "images").replace("npz", "png")
     image = Image.open(image_path)
-    image.save("Output/image.png")
+    image.save("logs/image.png")
 
     gen_pts, gen_normals, gen_colors = depth_to_pcd_normals(GenDepths, GenNormals, GenColors)
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(gen_pts)
     pcd.normals = o3d.utility.Vector3dVector(gen_normals)
     pcd.colors = o3d.utility.Vector3dVector(gen_colors)
-    o3d.io.write_point_cloud("Output/gt.ply", pcd)
+    o3d.io.write_point_cloud("logs/gt.ply", pcd)
 
-    shutil.rmtree("Output/parts")
-    os.makedirs("Output/parts", exist_ok=True)
+    shutil.rmtree("logs/parts")
+    os.makedirs("logs/parts", exist_ok=True)
     
     for i in range(16):
         gen_pts, gen_normals, gen_colors = depth_to_pcd_normals(GenDepths[i:i+1], GenNormals[i:i+1], GenColors[i:i+1])
@@ -165,7 +167,7 @@ for depth_path in depths_paths:
         pcd.normals = o3d.utility.Vector3dVector(gen_normals)
         pcd.colors = o3d.utility.Vector3dVector(gen_colors)
         # export the point cloud to a ply file
-        o3d.io.write_point_cloud(f"Output/parts/{i:02d}_object.ply", pcd)
+        o3d.io.write_point_cloud(f"logs/parts/{i:02d}_object.ply", pcd)
 
         # create arrow that point to the pcd.points
         arrow_trimesh = []
@@ -178,13 +180,13 @@ for depth_path in depths_paths:
             arrow_trimesh += [create_arrow([0, 0, -0.5], gen_pts[j])]
         arrow_trimesh = trimesh.util.concatenate(arrow_trimesh)
         # export the arrow to a ply file
-        arrow_trimesh.export(f"Output/parts/{i:02d}_arrow.ply")
+        arrow_trimesh.export(f"logs/parts/{i:02d}_arrow.ply")
 
     # merged_pcd.colors = o3d.utility.Vector3dVector(np.asarray(merged_pcd.normals) * 0.5 + 0.5)
-    # o3d.io.write_point_cloud("Output/merged_normal.ply", merged_pcd)
+    # o3d.io.write_point_cloud("logs/merged_normal.ply", merged_pcd)
 
     # merged_pcd.colors = o3d.utility.Vector3dVector(np.asarray(merged_pcd.colors) * 0.0 + 1.0)
-    # o3d.io.write_point_cloud("Output/merged_depth.ply", merged_pcd)
+    # o3d.io.write_point_cloud("logs/merged_depth.ply", merged_pcd)
 
     # save GenDepths, GenNormals, GenColors as a sequential video
     GenDepths = GenDepths / (far - near)
@@ -217,5 +219,5 @@ for depth_path in depths_paths:
     white_image = white_image[None].repeat(GenHits.shape[0], 0)
 
     GenXRay = np.concatenate([white_image, GenHits, GenDepths, GenNormals, GenColors], axis=2)
-    imageio.mimsave('Output/xray.gif', GenXRay, loop=256, format='GIF', fps=1)  # 'duration' controls the frame timing in seconds
+    imageio.mimsave('logs/xray.gif', GenXRay, loop=256, format='GIF', fps=1)  # 'duration' controls the frame timing in seconds
     import pdb; pdb.set_trace()
