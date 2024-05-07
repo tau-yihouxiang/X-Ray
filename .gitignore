@@ -3,3 +3,4 @@ Output/
 .vscode/
 Data/
 logs/
+*.DS_Store
