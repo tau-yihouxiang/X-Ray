@@ -170,7 +170,7 @@ if __name__ == "__main__":
         GenColors = GenColors.cpu().numpy()
 
         gen_pts, gen_normals, gen_colors = depth_to_pcd_normals(GenDepths, GenNormals, GenColors)
-        gen_pts[:, 2] += 1.5
+        # gen_pts[:, 2] += 1.5
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(gen_pts)
         pcd.normals = o3d.utility.Vector3dVector(gen_normals)
@@ -185,7 +185,7 @@ if __name__ == "__main__":
         GtNormals = xray[:, 1:4]
         GtColors = xray[:, 4:7]
         gt_pts, gt_normals, gt_colors = depth_to_pcd_normals(GtDepths, GtNormals, GtColors)
-        gt_pts[:, 2] += 1.5
+        # gt_pts[:, 2] += 1.5
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(gt_pts)
         pcd.normals = o3d.utility.Vector3dVector(gt_normals)

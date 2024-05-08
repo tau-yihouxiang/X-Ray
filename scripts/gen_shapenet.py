@@ -163,7 +163,7 @@ def process_model(model_path):
 
         box_min, box_max = mesh.bounds
         # scale = np.max(np.abs(box_max - box_min))
-        mesh.apply_scale(1.1)
+        # mesh.apply_scale(1.1)
 
         box_min, box_max = mesh.bounds
         center = 0.0 * (box_min + box_max) / 2
@@ -256,8 +256,8 @@ def process_model(model_path):
 
 if __name__ == "__main__":
     root_dir = "/data/taohu/Data/ShapeNet/ShapeNetCore.v2_Clean"
-    img_dir = "/data/taohu/Data/ShapeNet/Render/images"
-    depth_dir = "/data/taohu/Data/ShapeNet/Render/depths"
+    img_dir = "/data/taohu/Data/ShapeNet/dataset/images"
+    depth_dir = "/data/taohu/Data/ShapeNet/dataset/depths"
     image_height = 256
     image_width = 256
 

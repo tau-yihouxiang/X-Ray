@@ -153,7 +153,7 @@ if __name__ == "__main__":
         GenColors = GenColors.cpu().numpy()
 
         gen_pts, gen_normals, gen_colors = depth_to_pcd_normals(GenDepths, GenNormals, GenColors)
-        gen_pts += 1.5
+        # gen_pts += 1.5
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(gen_pts)
         pcd.normals = o3d.utility.Vector3dVector(gen_normals)
@@ -164,7 +164,7 @@ if __name__ == "__main__":
         shutil.copy(image_path.replace(".png", "_prd.ply"), f"Output/{exp_name}/evaluate/{uid}_prd.ply")
         gt_pcd = o3d.io.read_point_cloud(image_path.replace(".png", "_gt.ply"))
         gt_pts = np.asarray(gt_pcd.points)
-        gt_pts += 1.5
+        # gt_pts += 1.5
 
         chamfer_distance = compute_trimesh_chamfer(gt_pts, gen_pts)
         all_chamfer_distance += [chamfer_distance]

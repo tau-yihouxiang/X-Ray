@@ -110,7 +110,7 @@ def load_depths( depths_path):
 	restored_array = loaded_sparse_matrix.toarray().reshape(original_shape)
 	return restored_array
 
-instance_data_root = "Data/Objaverse_XRay/depths"
+instance_data_root = "Data/ShapeNetV2_Car/depths"
 
 depths_paths = glob.glob(os.path.join(instance_data_root, "**/*.npz"), recursive=True)
 # shuffle
@@ -120,7 +120,7 @@ near = 0.6
 far = 2.4
 
 for depth_path in depths_paths:
-    depth_path = "Data/Objaverse_XRay/depths/690b5725419e4b05938f9a00ce818e78/001.npz"
+    # depth_path = "Data/Objaverse_XRay/depths/690b5725419e4b05938f9a00ce818e78/001.npz"
     print(depth_path)
     depths = load_depths(depth_path)
     GenDepths = depths[:, 0:1]

@@ -4,3 +4,4 @@ Output/
 Data/
 logs/
 *.DS_Store
+test/
