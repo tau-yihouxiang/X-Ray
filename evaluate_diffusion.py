@@ -1,5 +1,6 @@
 import glob
 from diffusers import UNetSpatioTemporalConditionModel
+from src.dataset import DiffusionDataset
 from src.xray_pipeline import StableVideoDiffusionPipeline
 from diffusers.utils import load_image
 import torch
@@ -79,7 +80,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("SVD Depth Inference")
     parser.add_argument("--exp", type=str, default="ShapeNet_Car_loss", help="experiment name")
     parser.add_argument("--model_id", type=str, default="stabilityai/stable-video-diffusion-img2vid")
-    parser.add_argument("--data_root", type=str, default="Data/ShapeNet_Car/depths", help="data root")
+    parser.add_argument("--data_root", type=str, default="Data/ShapeNet_Car", help="data root")
     args = parser.parse_args()
 
     near = 0.6
@@ -107,13 +108,10 @@ if __name__ == "__main__":
 
     height = 512
     width = 512
-    prompt = ""
 
-    xray_paths = glob.glob(os.path.join(xray_root, "**/*.npz"), recursive=True)
-    image_paths = [x.replace("depths", "images").replace(".npz", ".png") for x in xray_paths]
-    sorted(image_paths)
-    image_paths = image_paths[::10] # test set
-    image_paths = image_paths[::50]
+    val_dataset = DiffusionDataset(xray_root, height, num_frames=8, near=near, far=far, phase="val")
+    depth_paths = val_dataset.depth_paths[::50]
+    image_paths = [path.replace("depths", "images").replace(".npz", ".png") for path in depth_paths]
 
     if os.path.exists(f"Output/{exp_name}/evaluate"):
         shutil.rmtree(f"Output/{exp_name}/evaluate")
@@ -126,7 +124,12 @@ if __name__ == "__main__":
         uid = image_path.split("/")[-2]
 
         with torch.no_grad():
-            image = load_image(image_path).resize((width, height), Image.BILINEAR).convert("RGB")
+            image = load_image(image_path).resize((width, height), Image.BILINEAR)
+            mask = image.split()[-1]
+            mask = (np.array(mask) / 255 > 0.5).astype(np.float32)
+            if mask.sum() < 64 * 64:
+                continue
+            image = image.convert("RGB")
             outputs = pipe(image,
                             height=height,
                             width=width,
@@ -171,7 +174,7 @@ if __name__ == "__main__":
         o3d.io.write_point_cloud(f"Output/{exp_name}/evaluate/{uid}_gt.ply", pcd)
 
         chamfer_distance = compute_trimesh_chamfer(gt_pts, gen_pts)
-        # if not nan
+        # if chamfer_distance is valid
         if chamfer_distance == chamfer_distance:
             all_chamfer_distance += [chamfer_distance]
             progress_bar.set_postfix({"chamfer_distance": np.mean(all_chamfer_distance)})

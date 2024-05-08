@@ -13,6 +13,7 @@ from src.chamfer_distance import compute_trimesh_chamfer
 from scipy.sparse import csr_matrix
 import argparse
 from diffusers import AutoencoderKL
+from src.dataset import DiffusionDataset
 from src.xray_decoder import AutoencoderKLTemporalDecoder
 
 
@@ -80,7 +81,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("SVD Depth Inference")
     parser.add_argument("--exp", type=str, default="Objaverse_80K_upsampler", help="experiment name")
-    parser.add_argument("--data_root", type=str, default="/data/taohu/Data/Objaverse/Objaverse_80K_filter/depths", help="data root")
+    parser.add_argument("--data_root", type=str, default="Data/Objaverse_XRay", help="data root")
     args = parser.parse_args()
 
     near = 0.6
@@ -104,11 +105,9 @@ if __name__ == "__main__":
     height = 256
     width = 256
 
-    xray_paths = glob.glob(os.path.join(xray_root, "*/*.npz"))
-    image_paths = [x.replace("depths", "images").replace(".npz", ".png") for x in xray_paths]
-    sorted(image_paths)
-    image_paths = image_paths[::10] # test set
-    image_paths = image_paths[::50]
+    val_dataset = DiffusionDataset(xray_root, height, num_frames=8, near=near, far=far, phase="val")
+    depth_paths = val_dataset.depth_paths[::50]
+    image_paths = [path.replace("depths", "images").replace(".npz", ".png") for path in depth_paths]
 
     all_chamfer_distance = []
     progress_bar =  tqdm(range(len(image_paths)))
@@ -129,7 +128,13 @@ if __name__ == "__main__":
 
             xray_low = xray_low + torch.randn_like(xray_low) * random.uniform(0, 1) * 0.1
 
-            image = load_image(image_path).resize((width * 2, height * 2), Image.BILINEAR).convert("RGB")
+            image = load_image(image_path).resize((width, height), Image.BILINEAR)
+            mask = image.split()[-1]
+            mask = (np.array(mask) / 255 > 0.5).astype(np.float32)
+            if mask.sum() < 64 * 64: # filter invalid image
+                continue
+            image = image.convert("RGB")
+
             conditional_pixel_values = (torchvision.transforms.ToTensor()(image).unsqueeze(0) * 2 - 1).half().cuda()
             conditional_latents = vae_image.encode(conditional_pixel_values).latent_dist.mode().float()
 

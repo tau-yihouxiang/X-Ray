@@ -27,9 +27,9 @@ class DiffusionDataset(Dataset):
         sorted(self.depth_paths)
         if phase == "train":
             del self.depth_paths[::10]
+            random.shuffle(self.depth_paths)
         else:
             self.depth_paths = self.depth_paths[::10]
-        random.shuffle(self.depth_paths)
         self.num_samples = len(self.depth_paths)        
 
     def __len__(self):
@@ -74,6 +74,7 @@ class DiffusionDataset(Dataset):
             _, _, _, mask = image_values_pil.split()
             depth = (depths[0, 0] > 0).astype(np.float32)
             mask = (np.array(mask.resize(depth.shape)) / 255 > 0.5).astype(np.float32)
+            assert mask.sum() > 64 * 64, f"mask.sum(): {mask.sum()}"
             iou = (mask * depth).sum() / np.maximum(mask, depth).sum()
             assert iou > 0.7, f"iou: {iou}"
 
