@@ -33,6 +33,7 @@ from diffusers.schedulers import EulerDiscreteScheduler
 from diffusers.utils import BaseOutput, logging
 from diffusers.utils.torch_utils import randn_tensor
 from diffusers import DiffusionPipeline
+import torch.nn.functional as F
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -167,7 +168,10 @@ class StableVideoDiffusionPipeline(DiffusionPipeline):
         do_classifier_free_guidance,
     ):
         image = image.to(device=device)
-        image_latents = self.vae.encode(image).latent_dist.mode()
+        # image_latents = self.vae.encode(image).latent_dist.mode()
+        image_latents = F.interpolate(image, (512, 512), mode="bilinear")
+        image_latents = self.vae.encode(image_latents).latent_dist.mode()
+        image_latents = F.interpolate(image_latents, (image.shape[-2] // 8, image.shape[-2] // 8), mode="bilinear")
 
         if do_classifier_free_guidance:
             negative_image_latents = torch.zeros_like(image_latents)

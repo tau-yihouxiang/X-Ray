@@ -33,6 +33,7 @@ from diffusers.schedulers import EulerDiscreteScheduler
 from diffusers.utils import BaseOutput, logging
 from diffusers.utils.torch_utils import randn_tensor
 from diffusers import DiffusionPipeline
+import torch.nn.functional as F
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -167,7 +168,10 @@ class StableVideoDiffusionPipeline(DiffusionPipeline):
         do_classifier_free_guidance,
     ):
         image = image.to(device=device)
-        image_latents = self.vae.encode(image).latent_dist.mode()
+        # image_latents = self.vae.encode(image).latent_dist.mode()
+        image_latents = F.interpolate(image, (512, 512), mode="bilinear")
+        image_latents = self.vae.encode(image_latents).latent_dist.mode()
+        image_latents = F.interpolate(image_latents, (image.shape[-2] // 8, image.shape[-2] // 8), mode="bilinear")
 
         if do_classifier_free_guidance:
             negative_image_latents = torch.zeros_like(image_latents)
@@ -268,8 +272,8 @@ class StableVideoDiffusionPipeline(DiffusionPipeline):
             batch_size,
             num_frames,
             num_channels_latents,
-            height // self.vae_scale_factor,
-            width // self.vae_scale_factor,
+            height,
+            width,
         )
         if isinstance(generator, list) and len(generator) != batch_size:
             raise ValueError(
@@ -400,8 +404,6 @@ class StableVideoDiffusionPipeline(DiffusionPipeline):
         ```
         """
         # 0. Default height and width to unet
-        height = height or self.unet.config.sample_size * self.vae_scale_factor
-        width = width or self.unet.config.sample_size * self.vae_scale_factor
 
         num_frames = num_frames if num_frames is not None else self.unet.config.num_frames
         decode_chunk_size = decode_chunk_size if decode_chunk_size is not None else num_frames
@@ -431,7 +433,7 @@ class StableVideoDiffusionPipeline(DiffusionPipeline):
         fps = fps - 1
 
         # 4. Encode input image using VAE
-        image = self.image_processor.preprocess(image, height=height, width=width)
+        image = self.image_processor.preprocess(image, height=height*8, width=width*8)
         noise = randn_tensor(image.shape, generator=generator, device=image.device, dtype=image.dtype)
         image = image + noise_aug_strength * noise
 

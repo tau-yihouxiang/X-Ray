@@ -106,8 +106,8 @@ if __name__ == "__main__":
             torch_dtype=torch.float16,
         ).to("cuda")
 
-    height = 512
-    width = 512
+    height = 64
+    width = 64
 
     val_dataset = DiffusionDataset(xray_root, height, num_frames=8, near=args.near, far=args.far, phase="val")
     depth_paths = val_dataset.depth_paths[::50]
@@ -124,7 +124,7 @@ if __name__ == "__main__":
         uid = image_path.split("/")[-2]
 
         with torch.no_grad():
-            image = load_image(image_path).resize((width, height), Image.BILINEAR)
+            image = load_image(image_path).resize((width * 8, height * 8), Image.BILINEAR)
             mask = image.split()[-1]
             mask = (np.array(mask) / 255 > 0.5).astype(np.float32)
             if mask.sum() < 64 * 64:
