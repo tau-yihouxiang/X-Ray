@@ -153,7 +153,7 @@ if __name__ == "__main__":
         GenColors = (outputs[:, 4:7].cpu().numpy() * 0.5 + 0.5)
 
         gen_pts, gen_normals, gen_colors = depth_to_pcd_normals(GenDepths, GenNormals, GenColors)
-        # gen_pts[:, 2] += 1.5
+        gen_pts = gen_pts - np.mean(gen_pts, axis=0)
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(gen_pts)
         pcd.normals = o3d.utility.Vector3dVector(gen_normals)
@@ -166,13 +166,14 @@ if __name__ == "__main__":
         GtNormals = xray[:, 1:4]
         GtColors = xray[:, 4:7]
         gt_pts, gt_normals, gt_colors = depth_to_pcd_normals(GtDepths, GtNormals, GtColors)
-        # gt_pts[:, 2] += 1.5
+        gt_pts = gt_pts - np.mean(gt_pts, axis=0)
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(gt_pts)
         pcd.normals = o3d.utility.Vector3dVector(gt_normals)
         pcd.colors = o3d.utility.Vector3dVector(gt_colors)
         o3d.io.write_point_cloud(f"Output/{exp_name}/evaluate/{uid}_gt.ply", pcd)
 
+        # normalize gt_pts and gen_pts
         chamfer_distance = compute_trimesh_chamfer(gt_pts, gen_pts)
         # if chamfer_distance is valid
         if chamfer_distance == chamfer_distance:
