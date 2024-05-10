@@ -1,8 +1,8 @@
 #/bin/bash
 
 export MODEL_NAME="stabilityai/stable-video-diffusion-img2vid"
-export OUTPUT_DIR="Output/ShapeNet_Car"
-export INSTANCE_DIR="Data/ShapeNet_Car"
+export OUTPUT_DIR="Output/ShapeNetV2_Car"
+export INSTANCE_DIR="Data/ShapeNetV2_Car"
 export NUM_GPUS=4
 
 CUDA_VISIBLE_DEVICES=0,1,2,3 accelerate launch \
@@ -21,4 +21,6 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 accelerate launch \
     --num_workers=6 \
     --validation_steps=1000 \
     --num_validation_images=5 \
+    --near 0.5 \
+    --far 1.5 \
     --resume_from_checkpoint="latest"

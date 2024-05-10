@@ -43,7 +43,7 @@ from transformers import CLIPImageProcessor, CLIPVisionModelWithProjection
 from einops import rearrange
 
 import diffusers
-from src.xray_pipeline import StableVideoDiffusionPipeline
+from src.xray_sr_pipeline import StableVideoDiffusionPipeline
 from diffusers import AutoencoderKLTemporalDecoder, EulerDiscreteScheduler, UNetSpatioTemporalConditionModel
 from diffusers.image_processor import VaeImageProcessor
 from diffusers.optimization import get_scheduler
@@ -621,7 +621,7 @@ def main():
         args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision, variant="fp16")
 
     unet = UNetSpatioTemporalConditionModel.from_config(
-        "src/xray_unet.json",
+        "src/xray_unet_sr.json",
         low_cpu_mem_usage=True,
         variant="fp16",
     )
@@ -882,6 +882,10 @@ def main():
                 xray = batch["xray"].to(weight_dtype).to(
                     accelerator.device, non_blocking=True
                 )
+
+                xray_lr = batch["xray_lr"].to(weight_dtype).to(
+                    accelerator.device, non_blocking=True
+                )
                 conditional_pixel_values = batch["image_values"].to(weight_dtype).to(
                     accelerator.device, non_blocking=True)
 
@@ -898,12 +902,15 @@ def main():
                     torchvision.utils.save_image(visual, os.path.join(args.output_dir, "samples", "pixel_value_aligned.png"), normalize=True)
 
                 latents = xray
+                xray_lr = xray_lr + 0.1 * torch.randn_like(xray_lr)
 
                 # Sample noise that we'll add to the latents
                 noise = torch.randn_like(latents)
                 bsz = latents.shape[0]
 
-                conditional_latents = vae.encode(conditional_pixel_values).latent_dist.mode()
+                conditional_latents = F.interpolate(conditional_pixel_values, (512, 512), mode="bilinear")
+                conditional_latents = vae.encode(conditional_latents).latent_dist.mode()
+                conditional_latents = F.interpolate(conditional_latents, (args.height//8, args.height//8), mode="bilinear")
 
                 # Sample a random timestep for each image
                 # P_mean=0.7 P_std=1.6
@@ -960,7 +967,7 @@ def main():
                 conditional_latents = conditional_latents.unsqueeze(
                     1).repeat(1, noisy_latents.shape[1], 1, 1, 1)
                 inp_noisy_latents = torch.cat(
-                    [inp_noisy_latents, conditional_latents], dim=2)
+                    [inp_noisy_latents, conditional_latents, xray_lr], dim=2)
 
                 # check https://arxiv.org/abs/2206.00364(the EDM-framework) for more details.
                 target = latents
@@ -979,15 +986,8 @@ def main():
                     (weighing.float() * (denoised_latents.float() -
                      target.float()) ** 2).reshape(target.shape[0], -1),
                     dim=1,
-                ).mean()
-
-                hits = (target[:, :, -1:] > 0).expand_as(denoised_latents[:, :, -1:])
-                if hits.sum() > 0:
-                    loss_surface = ((denoised_latents.float()[:, :, -1:][hits] 
-                                             - target.float()[:, :, -1:][hits]) ** 2).mean()
-                else:
-                    loss_surface = 0.0
-                loss = loss + loss_surface
+                )
+                loss = loss.mean()
 
                 # Gather the losses across all processes for logging (if we use distributed training).
                 avg_loss = accelerator.gather(
@@ -1081,14 +1081,17 @@ def main():
                         with torch.autocast(
                             str(accelerator.device).replace(":0", ""), enabled=accelerator.mixed_precision == "fp16"
                         ):
-                            val_image_paths = val_dataset.depth_paths[:args.num_validation_images]
+                            # val_image_paths = val_dataset.depth_paths[:args.num_validation_images]
                             for val_img_idx in range(args.num_validation_images):
                                 num_frames = args.num_frames
-                                image_path = val_image_paths[val_img_idx].replace("depths", "images").replace(".npz", ".png")
-                                image_val = load_image(image_path).convert("RGB")
+                                image_path = val_dataset.depth_paths[val_img_idx].replace("depths", "images").replace(".npz", ".png")
+                                image_val = load_image(image_path).convert("RGB").resize((args.width, args.height))
                                 image_val.save(f"{val_save_dir}/step_{global_step}_val_img_{val_img_idx}_original.png")
+
+                                xray_lr = val_dataset[val_img_idx]["xray_lr"][None].to(pipeline.device)
                                 outputs = pipeline(
                                     image_val,
+                                    xray_lr,
                                     height=args.height,
                                     width=args.width,
                                     num_frames=num_frames,

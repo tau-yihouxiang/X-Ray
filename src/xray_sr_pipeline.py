@@ -305,6 +305,7 @@ class StableVideoDiffusionPipeline(DiffusionPipeline):
     def __call__(
         self,
         image: Union[PIL.Image.Image, List[PIL.Image.Image], torch.FloatTensor],
+        xray_lr: torch.Tensor,
         height: int = 576,
         width: int = 1024,
         num_frames: Optional[int] = None,
@@ -488,6 +489,8 @@ class StableVideoDiffusionPipeline(DiffusionPipeline):
 
         self._guidance_scale = guidance_scale
 
+        xray_lr = torch.cat([xray_lr] * 2) if do_classifier_free_guidance else latents
+
         # 8. Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
         self._num_timesteps = len(timesteps)
@@ -499,7 +502,7 @@ class StableVideoDiffusionPipeline(DiffusionPipeline):
                 latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
                 # Concatenate image_latents over channels dimention
-                latent_model_input = torch.cat([latent_model_input, image_latents], dim=2)
+                latent_model_input = torch.cat([latent_model_input, image_latents, xray_lr], dim=2)
 
                 # predict the noise residual
                 noise_pred = self.unet(

@@ -65,8 +65,10 @@ class DiffusionDataset(Dataset):
             xray[:, 4:7] = xray[:, 4:7] * 2 - 1
             xray = torch.cat([xray, hit], dim=1)
             
-            sample["xray"] = torch.nn.functional.interpolate(xray, size=(self.size // 8, self.size // 8), mode="nearest")
-            
+            sample["xray"] = torch.nn.functional.interpolate(xray, size=(self.size//8, self.size//8), mode="nearest")
+            xray_lr = torch.nn.functional.interpolate(xray, size=(self.size // 32, self.size // 32), mode="nearest")
+            sample["xray_lr"] = torch.nn.functional.interpolate(xray_lr, size=(self.size // 8, self.size // 8), mode="nearest")
+
             # read condition image
             image_values_pil = Image.open(depth_path.replace("depths", "images").replace(".npz", ".png"))
             
