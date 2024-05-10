@@ -12,8 +12,8 @@ CUDA_VISIBLE_DEVICES=2 accelerate launch \
     --output_dir=${OUTPUT_DIR} \
     --per_gpu_batch_size=1 --gradient_accumulation_steps=1 \
     --max_train_steps=1000000 \
-    --width=2048 \
-    --height=2048 \
+    --width=256 \
+    --height=256 \
     --num_frames=8 \
     --checkpointing_steps=1000 --checkpoints_total_limit=3 \
     --learning_rate=1e-4 --lr_warmup_steps=0 \

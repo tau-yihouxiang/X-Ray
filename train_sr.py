@@ -896,7 +896,7 @@ def main():
                     torchvision.utils.save_image(xray[0, :, 1:4], os.path.join(args.output_dir, "samples", "normals.png"), normalize=True, nrow=4)
                     torchvision.utils.save_image(xray[0, :, 4:7], os.path.join(args.output_dir, "samples", "colors.png"), normalize=True, nrow=4)
                     torchvision.utils.save_image(conditional_pixel_values[0:1], os.path.join(args.output_dir, "samples", "images.png"), normalize=True)
-                    visual = torch.nn.functional.interpolate(xray[0, :1, :1], (args.height, args.width))
+                    visual = torch.nn.functional.interpolate(xray[0, :1, :1], (args.height*8, args.width*8))
                     visual = visual.clip(-1, 1)
                     visual = (visual + conditional_pixel_values[0:1]) / 2
                     torchvision.utils.save_image(visual, os.path.join(args.output_dir, "samples", "pixel_value_aligned.png"), normalize=True)
@@ -910,7 +910,7 @@ def main():
 
                 conditional_latents = F.interpolate(conditional_pixel_values, (512, 512), mode="bilinear")
                 conditional_latents = vae.encode(conditional_latents).latent_dist.mode()
-                conditional_latents = F.interpolate(conditional_latents, (args.height//8, args.height//8), mode="bilinear")
+                conditional_latents = F.interpolate(conditional_latents, (args.height, args.width), mode="bilinear")
 
                 # Sample a random timestep for each image
                 # P_mean=0.7 P_std=1.6
@@ -1085,7 +1085,7 @@ def main():
                             for val_img_idx in range(args.num_validation_images):
                                 num_frames = args.num_frames
                                 image_path = val_dataset.depth_paths[val_img_idx].replace("depths", "images").replace(".npz", ".png")
-                                image_val = load_image(image_path).convert("RGB").resize((args.width, args.height))
+                                image_val = load_image(image_path).convert("RGB").resize((args.width * 8, args.height * 8))
                                 image_val.save(f"{val_save_dir}/step_{global_step}_val_img_{val_img_idx}_original.png")
 
                                 xray_lr = val_dataset[val_img_idx]["xray_lr"][None].to(pipeline.device)

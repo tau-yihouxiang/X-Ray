@@ -65,9 +65,9 @@ class DiffusionDataset(Dataset):
             xray[:, 4:7] = xray[:, 4:7] * 2 - 1
             xray = torch.cat([xray, hit], dim=1)
             
-            sample["xray"] = torch.nn.functional.interpolate(xray, size=(self.size//8, self.size//8), mode="nearest")
-            xray_lr = torch.nn.functional.interpolate(xray, size=(self.size // 32, self.size // 32), mode="nearest")
-            sample["xray_lr"] = torch.nn.functional.interpolate(xray_lr, size=(self.size // 8, self.size // 8), mode="nearest")
+            sample["xray"] = torch.nn.functional.interpolate(xray, size=(self.size, self.size), mode="nearest")
+            xray_lr = torch.nn.functional.interpolate(xray, size=(self.size // 4, self.size // 4), mode="nearest")
+            sample["xray_lr"] = torch.nn.functional.interpolate(xray_lr, size=(self.size, self.size), mode="nearest")
 
             # read condition image
             image_values_pil = Image.open(depth_path.replace("depths", "images").replace(".npz", ".png"))
@@ -81,7 +81,7 @@ class DiffusionDataset(Dataset):
             assert iou > 0.7, f"iou: {iou}"
 
             image_values_pil = image_values_pil.convert("RGB")
-            image_values = image_values_pil.resize((self.size, self.size), Image.BILINEAR)
+            image_values = image_values_pil.resize((self.size * 8, self.size * 8), Image.BILINEAR)
             image_values = torchvision.transforms.ToTensor()(image_values) * 2 - 1
             sample["image_values"] = image_values
             return sample

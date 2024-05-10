@@ -6,12 +6,10 @@
     "block_out_channels": [
       64,
       128,
-      128,
       128
     ],
     "cross_attention_dim": 1024,
     "down_block_types": [
-      "CrossAttnDownBlockSpatioTemporal",
       "CrossAttnDownBlockSpatioTemporal",
       "CrossAttnDownBlockSpatioTemporal",
       "DownBlockSpatioTemporal"
@@ -22,7 +20,6 @@
     "num_attention_heads": [
       4,
       8,
-      8,
       8
     ],
     "num_frames": 8,
@@ -32,7 +29,6 @@
     "transformer_layers_per_block": 1,
     "up_block_types": [
       "UpBlockSpatioTemporal",
-      "CrossAttnUpBlockSpatioTemporal",
       "CrossAttnUpBlockSpatioTemporal",
       "CrossAttnUpBlockSpatioTemporal"
     ]
