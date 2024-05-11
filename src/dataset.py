@@ -70,13 +70,13 @@ class DiffusionDataset(Dataset):
             sample["xray_lr"] = torch.nn.functional.interpolate(xray_lr, size=(self.size, self.size), mode="nearest")
 
             # read condition image
-            image_values_pil = Image.open(depth_path.replace("depths", "images").replace(".npz", ".png"))
+            image_path = depth_path.replace("depths", "images").replace(".npz", ".png")
+            image_values_pil = Image.open(image_path)
             
             # filter
             _, _, _, mask = image_values_pil.split()
             depth = (depths[0, 0] > 0).astype(np.float32)
             mask = (np.array(mask.resize(depth.shape)) / 255 > 0.5).astype(np.float32)
-            assert mask.sum() > 64 * 64, f"mask.sum(): {mask.sum()}"
             iou = (mask * depth).sum() / np.maximum(mask, depth).sum()
             assert iou > 0.7, f"iou: {iou}"
 
@@ -84,6 +84,7 @@ class DiffusionDataset(Dataset):
             image_values = image_values_pil.resize((self.size * 8, self.size * 8), Image.BILINEAR)
             image_values = torchvision.transforms.ToTensor()(image_values) * 2 - 1
             sample["image_values"] = image_values
+            sample["image_path"] = image_path
             return sample
         
         except Exception as e:
@@ -151,7 +152,8 @@ class UpsamplerDataset(Dataset):
             sample["xray_low"] = torch.nn.functional.interpolate(xray_low, size=(self.size // 4, self.size // 4), mode="nearest")
 
             # read condition image
-            image_values_pil = Image.open(depth_path.replace("depths", "images").replace(".npz", ".png"))
+            image_path = depth_path.replace("depths", "images").replace(".npz", ".png")
+            image_values_pil = Image.open(image_path)
             
             # filter
             _, _, _, mask = image_values_pil.split()
@@ -164,6 +166,7 @@ class UpsamplerDataset(Dataset):
             image_values = image_values_pil.resize((self.size * 2, self.size * 2), Image.BILINEAR)
             image_values = torchvision.transforms.ToTensor()(image_values) * 2 - 1
             sample["image_values"] = image_values
+            sample["image_path"] = image_path
             return sample
         
         except Exception as e:

@@ -1,7 +1,7 @@
 import glob
 from diffusers import UNetSpatioTemporalConditionModel
 from src.dataset import DiffusionDataset
-from src.xray_pipeline import StableVideoDiffusionPipeline
+from src.xray_sr_pipeline import StableVideoDiffusionPipeline
 from diffusers.utils import load_image
 import torch
 from PIL import Image
@@ -111,8 +111,8 @@ if __name__ == "__main__":
             torch_dtype=torch.float16,
         ).to("cuda")
 
-    height = 64
-    width = 64
+    height = 256
+    width = 256
 
     val_dataset = DiffusionDataset(xray_root, height, num_frames=8, near=near, far=far, phase="val")
 
@@ -121,10 +121,11 @@ if __name__ == "__main__":
     os.makedirs(f"Output/{exp_name}/evaluate", exist_ok=True)
 
     all_chamfer_distance = []
-    progress_bar =  tqdm(range(min(500, len(val_dataset))))
+    progress_bar =  tqdm(range(500))
     for i in progress_bar:
         image_path = val_dataset[i]["image_path"]
         uid = image_path.split("/")[-2]
+        xray_lr = val_dataset[i]["xray_lr"].unsqueeze(0).to(pipe.device)
 
         with torch.no_grad():
             image = load_image(image_path).resize((width * 8, height * 8), Image.BILINEAR)
@@ -134,6 +135,7 @@ if __name__ == "__main__":
                 continue
             image = image.convert("RGB")
             outputs = pipe(image,
+                            xray_lr,
                             height=height,
                             width=width,
                             num_frames=8,
