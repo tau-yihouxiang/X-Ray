@@ -77,34 +77,42 @@ def load_depths(depths_path):
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser("SVD Depth Inference")
-    parser.add_argument("--exp", type=str, default="Objaverse_80K_up_5to8", help="experiment name")
-    parser.add_argument("--data_root", type=str, default="Output/train_with_A100/evaluate", help="data root")
+    parser = argparse.ArgumentParser("X-Ray full Inference")
+    parser.add_argument("--exp_upsampler", type=str, default="ShapeNetV2_Car_upsampler", help="experiment name")
+    parser.add_argument("--exp_diffusion", type=str, default="ShapeNetV2_Car", help="experiment name")
+    parser.add_argument("--data_root", type=str, default="Data/Objaverse_XRay", help="data root")
     args = parser.parse_args()
 
-    near = 0.6
-    far = 2.4
+    if "shapenet" in args.data_root.lower():
+        near = 0.5
+        far = 1.5
+    else:
+        near = 0.6
+        far = 2.4
     num_frames = 8
 
-    exp_name = args.exp
+    exp_upsampler = args.exp_upsampler
+    exp_diffusion = args.exp_diffusion
     xray_root = args.data_root
+
+    if os.path.exists(f"Output/{exp_upsampler}/evaluate"):
+        shutil.rmtree(f"Output/{exp_upsampler}/evaluate")
+    os.makedirs(f"Output/{exp_upsampler}/evaluate", exist_ok=True)
 
     vae_image = AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16).cuda()
 
-    xray_paths = glob.glob(os.path.join(xray_root, "*/*.npz"))
-    image_paths = [x.replace("depths", "images").replace(".npz", ".png") for x in xray_paths]
-    sorted(image_paths)
-    
-    os.makedirs(f"Output/{exp_name}/evaluate", exist_ok=True)
+    image_paths = glob.glob(f"Output/{exp_diffusion}/evaluate/*.png")
+
+    os.makedirs(f"Output/{exp_upsampler}/evaluate", exist_ok=True)
     progress_bar =  tqdm(range(len(image_paths)))
     
     # Get the most recent checkpoint
-    dirs = os.listdir(os.path.join("Output", exp_name))
+    dirs = os.listdir(os.path.join("Output", exp_upsampler))
     dirs = [d for d in dirs if d.startswith("checkpoint")]
     dirs = sorted(dirs, key=lambda x: int(x.split("-")[1]))
     ckpt_name = dirs[-1]
-    print("restore from", f"Output/{exp_name}/{ckpt_name}/vae")
-    vae = AutoencoderKLTemporalDecoder.from_pretrained(f"Output/{exp_name}/{ckpt_name}", subfolder="vae").cuda()
+    print("restore from", f"Output/{exp_upsampler}/{ckpt_name}/vae")
+    vae = AutoencoderKLTemporalDecoder.from_pretrained(f"Output/{exp_upsampler}/{ckpt_name}", subfolder="vae").cuda()
 
     height = 256
     width = 256
@@ -117,10 +125,7 @@ if __name__ == "__main__":
         with torch.no_grad():
             depth_path = image_path.replace(".png", ".pt")
             depths = torch.load(depth_path)
-            xray_low = depths.clone()  # [8, 7, H, W]
-            hit = (xray_low[:, 0:1] > -1).clone().float() * 2 - 1
-            # xray_low = torch.cat([xray_low, hit], dim=1).cuda()[None]
-            xray_low = torch.cat([xray_low[:, 0:1], xray_low[:, 4:7], hit], dim=1).cuda()[None]
+            xray_lr = depths.clone().cuda()[None] # [8, 8, H, W]
 
             image = load_image(image_path).resize((width * 2, height * 2), Image.BILINEAR).convert("RGB")
             conditional_pixel_values = (torchvision.transforms.ToTensor()(image).unsqueeze(0) * 2 - 1).half().cuda()
@@ -128,16 +133,16 @@ if __name__ == "__main__":
 
             # Concatenate the `conditional_latents` with the `noisy_latents`.
             conditional_latents = conditional_latents.unsqueeze(
-                1).repeat(1, xray_low.shape[1], 1, 1, 1).float()
+                1).repeat(1, xray_lr.shape[1], 1, 1, 1).float()
             xray_input = torch.cat(
-                [xray_low, conditional_latents], dim=2)
+                [xray_lr, conditional_latents], dim=2)
             
             xray_input = xray_input.flatten(0, 1)
             model_pred = vae(xray_input, num_frames=num_frames).sample
             outputs = model_pred.reshape(-1, num_frames, *model_pred.shape[1:])[0]
             outputs = outputs.clamp(-1, 1) # clamp to [-1, 1]
 
-        image.save(f"Output/{exp_name}/evaluate/{uid}.png")
+        image.save(f"Output/{exp_upsampler}/evaluate/{uid}.png")
         GenDepths = (outputs[:, 0:1] * 0.5 + 0.5) * (far - near) + near
         GenHits = (outputs[:, 7:8] > 0).float()
         GenDepths[GenHits == 0] = 0
@@ -153,18 +158,18 @@ if __name__ == "__main__":
         GenColors = GenColors.cpu().numpy()
 
         gen_pts, gen_normals, gen_colors = depth_to_pcd_normals(GenDepths, GenNormals, GenColors)
-        # gen_pts += 1.5
+        gen_pts = gen_pts - np.mean(gen_pts, axis=0)
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(gen_pts)
         pcd.normals = o3d.utility.Vector3dVector(gen_normals)
         pcd.colors = o3d.utility.Vector3dVector(gen_colors)
-        o3d.io.write_point_cloud(f"Output/{exp_name}/evaluate/{uid}_prd_up4x.ply", pcd)
+        o3d.io.write_point_cloud(f"Output/{exp_upsampler}/evaluate/{uid}_prd_up4x.ply", pcd)
 
         # copy prd ply to the folder
-        shutil.copy(image_path.replace(".png", "_prd.ply"), f"Output/{exp_name}/evaluate/{uid}_prd.ply")
+        shutil.copy(image_path.replace(".png", "_prd.ply"), f"Output/{exp_upsampler}/evaluate/{uid}_prd.ply")
         gt_pcd = o3d.io.read_point_cloud(image_path.replace(".png", "_gt.ply"))
         gt_pts = np.asarray(gt_pcd.points)
-        # gt_pts += 1.5
+        gt_pts = gt_pts - np.mean(gt_pts, axis=0)
 
         chamfer_distance = compute_trimesh_chamfer(gt_pts, gen_pts)
         all_chamfer_distance += [chamfer_distance]

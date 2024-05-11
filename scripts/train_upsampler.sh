@@ -21,4 +21,5 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 accelerate launch \
     --num_workers=6 \
     --validation_steps=1000 \
     --num_validation_images=5 \
-    --resume_from_checkpoint="latest"
+    --pretrain_model="Output/ShapeNetV2_Car_upsampler/checkpoint-585000"
+    # --resume_from_checkpoint="latest"

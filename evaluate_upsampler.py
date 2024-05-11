@@ -1,5 +1,6 @@
 import glob
 import random
+import shutil
 from diffusers.utils import load_image
 import torch
 from PIL import Image
@@ -68,11 +69,8 @@ def depth_to_pcd_normals(GenDepths, GenNormals, GenColors):
 
 
 def load_depths(depths_path):
-    # 加载稀疏矩阵数据
     loaded_data = np.load(depths_path)
-    # 从加载的数据中获取稀疏矩阵的组成部分
     loaded_sparse_matrix = csr_matrix((loaded_data['data'], loaded_data['indices'], loaded_data['indptr']), shape=loaded_data['shape'])
-    # 将稀疏矩阵还原为原始形状
     original_shape = (16, 1+3+3, 256, 256)
     restored_array = loaded_sparse_matrix.toarray().reshape(original_shape)
     return restored_array
@@ -80,16 +78,24 @@ def load_depths(depths_path):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("SVD Depth Inference")
-    parser.add_argument("--exp", type=str, default="Objaverse_80K_up_svd64_2", help="experiment name")
-    parser.add_argument("--data_root", type=str, default="Data/Objaverse_XRay", help="data root")
+    parser.add_argument("--exp", type=str, default="ShapeNetV2_Car_upsampler", help="experiment name")
+    parser.add_argument("--data_root", type=str, default="Data/ShapeNetV2_Car", help="data root")
     args = parser.parse_args()
 
-    near = 0.6
-    far = 2.4
+    if "shapenet" in args.data_root.lower():
+        near = 0.5
+        far = 1.5
+    else:
+        near = 0.6
+        far = 2.4
     num_frames = 8
 
     exp_name = args.exp
     xray_root = args.data_root
+
+    if os.path.exists(f"Output/{exp_name}/evaluate"):
+        shutil.rmtree(f"Output/{exp_name}/evaluate")
+    os.makedirs(f"Output/{exp_name}/evaluate", exist_ok=True)
 
     vae_image = AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16).cuda()
 

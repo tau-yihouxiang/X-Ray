@@ -1,7 +1,6 @@
 import glob
+import time
 from diffusers import UNetSpatioTemporalConditionModel
-from src.dataset import DiffusionDataset
-from src.xray_pipeline import StableVideoDiffusionPipeline
 from diffusers.utils import load_image
 import torch
 from PIL import Image
@@ -16,6 +15,8 @@ from tqdm import tqdm
 from src.chamfer_distance import compute_trimesh_chamfer
 from scipy.sparse import csr_matrix
 import argparse
+from diffusers import AutoencoderKL
+from src.xray_sr_pipeline import StableVideoDiffusionPipeline
 
 
 
@@ -64,7 +65,6 @@ def depth_to_pcd_normals(GenDepths, GenNormals, GenColors):
     normals = GenNormals[valid_index]
     colors = GenColors[valid_index]
     xyz = rays_origins + ray_directions * GenDepths
-
     return xyz, normals, colors
 
 
@@ -77,16 +77,12 @@ def load_depths(depths_path):
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser("SVD Depth Inference")
-    parser.add_argument("--exp", type=str, default="Objaverse_XRay", help="experiment name")
-    parser.add_argument("--data_root", type=str, default="Data/Objaverse_XRay", help="data root")
+    parser = argparse.ArgumentParser("X-Ray full Inference")
     parser.add_argument("--model_id", type=str, default="stabilityai/stable-video-diffusion-img2vid")
-
+    parser.add_argument("--exp_upsampler", type=str, default="XRAY_SR", help="experiment name")
+    parser.add_argument("--exp_diffusion", type=str, default="Objaverse_XRay", help="experiment name")
+    parser.add_argument("--data_root", type=str, default="Data/Objaverse_XRay", help="data root")
     args = parser.parse_args()
-
-    exp_name = args.exp
-    model_id = args.model_id
-    xray_root = args.data_root
 
     if "shapenet" in args.data_root.lower():
         near = 0.5
@@ -94,46 +90,60 @@ if __name__ == "__main__":
     else:
         near = 0.6
         far = 2.4
+    num_frames = 8
 
-    pipe = StableVideoDiffusionPipeline.from_pretrained(model_id, 
+    exp_upsampler = args.exp_upsampler
+    exp_diffusion = args.exp_diffusion
+    xray_root = args.data_root
+
+    if os.path.exists(f"Output/{exp_upsampler}/evaluate"):
+        shutil.rmtree(f"Output/{exp_upsampler}/evaluate")
+    os.makedirs(f"Output/{exp_upsampler}/evaluate", exist_ok=True)
+
+    vae_image = AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16).cuda()
+
+    image_paths = glob.glob(f"Output/{exp_diffusion}/evaluate/*.png")
+
+    os.makedirs(f"Output/{exp_upsampler}/evaluate", exist_ok=True)
+    progress_bar =  tqdm(range(len(image_paths)))
+    
+    pipe = StableVideoDiffusionPipeline.from_pretrained(args.model_id, 
                                 torch_dtype=torch.float16, variant="fp16").to("cuda")
 
     # Get the most recent checkpoint
-    dirs = os.listdir(os.path.join("Output", exp_name))
+    dirs = os.listdir(os.path.join("Output", exp_upsampler))
     dirs = [d for d in dirs if d.startswith("checkpoint")]
     dirs = sorted(dirs, key=lambda x: int(x.split("-")[1]))
     ckpt_name = dirs[-1]
-    print("restore from", f"Output/{exp_name}/{ckpt_name}/unet")
+    print("restore from", f"Output/{exp_upsampler}/{ckpt_name}/unet")
 
     pipe.unet = UNetSpatioTemporalConditionModel.from_pretrained(
-            f"Output/{exp_name}/{ckpt_name}",
+            f"Output/{exp_upsampler}/{ckpt_name}",
             subfolder="unet",
             torch_dtype=torch.float16,
         ).to("cuda")
-
-    height = 64
-    width = 64
-
-    val_dataset = DiffusionDataset(xray_root, height, num_frames=8, near=near, far=far, phase="val")
-
-    if os.path.exists(f"Output/{exp_name}/evaluate"):
-        shutil.rmtree(f"Output/{exp_name}/evaluate")
-    os.makedirs(f"Output/{exp_name}/evaluate", exist_ok=True)
+    
+    height = 256
+    width = 256
 
     all_chamfer_distance = []
-    progress_bar =  tqdm(range(min(500, len(val_dataset))))
-    for i in progress_bar:
-        image_path = val_dataset[i]["image_path"]
-        uid = image_path.split("/")[-2]
+    for i in range(len(image_paths)):
+        image_path = image_paths[i]
+        uid = os.path.basename(image_path).replace(".png", "")
 
         with torch.no_grad():
-            image = load_image(image_path).resize((width * 8, height * 8), Image.BILINEAR)
-            mask = image.split()[-1]
-            mask = (np.array(mask) / 255 > 0.5).astype(np.float32)
-            if (mask.sum() / (mask.shape[0] * mask.shape[1])) < 0.05: # filter invalid image
-                continue
-            image_rgb = image.convert("RGB")
-            outputs = pipe(image_rgb,
+            depth_path = image_path.replace(".png", ".pt")
+            depths = torch.load(depth_path)
+            xray_lr = depths.clone().cuda()[None] # [1, 8, 8, H, W]
+
+            # interpolate the xray_lr to height, width
+            xray_lr = xray_lr.reshape(-1, 8, xray_lr.shape[-2], xray_lr.shape[-1])
+            xray_lr = F.interpolate(xray_lr, (height, width), mode="nearest")
+            xray_lr = xray_lr.reshape(1, 8, 8, height, width)
+            
+            image = load_image(image_path).resize((width * 2, height * 2), Image.BILINEAR).convert("RGB")
+            outputs = pipe(image,
+                            xray_lr,
                             height=height,
                             width=width,
                             num_frames=8,
@@ -143,48 +153,38 @@ if __name__ == "__main__":
                             noise_aug_strength=0.0,
                             output_type="latent").frames[0]
             outputs = outputs.clamp(-1, 1) # clamp to [-1, 1]
-        
-        # save outputs to .pt
-        torch.save(outputs.detach().cpu(), f"Output/{exp_name}/evaluate/{uid}.pt")
 
-        GenDepths = (outputs[:, 0:1].cpu().numpy() * 0.5 + 0.5) * (far - near) + near
+        image.save(f"Output/{exp_upsampler}/evaluate/{uid}.png")
+        GenDepths = (outputs[:, 0:1] * 0.5 + 0.5) * (far - near) + near
+        GenHits = (outputs[:, 7:8] > 0).float()
+        GenDepths[GenHits == 0] = 0
         GenDepths[GenDepths <= near] = 0
         GenDepths[GenDepths >= far] = 0
-        GenDepths_ori = GenDepths.copy()
-        for i in range(GenDepths.shape[0]-1):
-            GenDepths[i+1] = np.where(GenDepths_ori[i+1] < GenDepths_ori[i], 0, GenDepths_ori[i+1])
+        GenNormals = F.normalize(outputs[:, 1:4], dim=1)
+        GenNormals[GenHits.repeat(1, 3, 1, 1) == 0] = 0
+        GenColors = outputs[:, 4:7] * 0.5 + 0.5
+        GenColors[GenHits.repeat(1, 3, 1, 1) == 0] = 0
 
-        GenNormals = F.normalize(outputs[:, 1:4], dim=1).cpu().numpy()
-        GenColors = (outputs[:, 4:7].cpu().numpy() * 0.5 + 0.5)
+        GenDepths = GenDepths.cpu().numpy()
+        GenNormals = GenNormals.cpu().numpy()
+        GenColors = GenColors.cpu().numpy()
 
         gen_pts, gen_normals, gen_colors = depth_to_pcd_normals(GenDepths, GenNormals, GenColors)
         gen_pts = gen_pts - np.mean(gen_pts, axis=0)
-        pcd_gen = o3d.geometry.PointCloud()
-        pcd_gen.points = o3d.utility.Vector3dVector(gen_pts)
-        pcd_gen.normals = o3d.utility.Vector3dVector(gen_normals)
-        pcd_gen.colors = o3d.utility.Vector3dVector(gen_colors[..., :3])
-        
-        gt_path = image_path.replace("images", "depths").replace(".png", ".npz")
-        xray = load_depths(gt_path)[:8]
-        GtDepths = xray[:, 0:1]
-        GtNormals = xray[:, 1:4]
-        GtColors = xray[:, 4:7]
-        gt_pts, gt_normals, gt_colors = depth_to_pcd_normals(GtDepths, GtNormals, GtColors)
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(gen_pts)
+        pcd.normals = o3d.utility.Vector3dVector(gen_normals)
+        pcd.colors = o3d.utility.Vector3dVector(gen_colors)
+        o3d.io.write_point_cloud(f"Output/{exp_upsampler}/evaluate/{uid}_prd_up4x.ply", pcd)
+
+        # copy prd ply to the folder
+        shutil.copy(image_path.replace(".png", "_prd.ply"), f"Output/{exp_upsampler}/evaluate/{uid}_prd.ply")
+        gt_pcd = o3d.io.read_point_cloud(image_path.replace(".png", "_gt.ply"))
+        gt_pts = np.asarray(gt_pcd.points)
         gt_pts = gt_pts - np.mean(gt_pts, axis=0)
-        pcd_gt = o3d.geometry.PointCloud()
-        pcd_gt.points = o3d.utility.Vector3dVector(gt_pts)
-        pcd_gt.normals = o3d.utility.Vector3dVector(gt_normals)
-        pcd_gt.colors = o3d.utility.Vector3dVector(gt_colors)
 
-        # normalize gt_pts and gen_pts
         chamfer_distance = compute_trimesh_chamfer(gt_pts, gen_pts)
-        # if chamfer_distance is valid
         all_chamfer_distance += [chamfer_distance]
-        # save
-        image.save(f"Output/{exp_name}/evaluate/{uid}.png")
-        o3d.io.write_point_cloud(f"Output/{exp_name}/evaluate/{uid}_prd.ply", pcd_gen)
-        o3d.io.write_point_cloud(f"Output/{exp_name}/evaluate/{uid}_gt.ply", pcd_gt)
-
         progress_bar.set_postfix({"chamfer_distance": np.mean(all_chamfer_distance)})
         progress_bar.update(1)
-        
+    print(f"{ckpt_name}: chamfer distance: {np.mean(all_chamfer_distance)}")

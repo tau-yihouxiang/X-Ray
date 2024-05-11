@@ -487,7 +487,7 @@ def main():
         vae = AutoencoderKLTemporalDecoder.from_pretrained(
             args.pretrain_model, subfolder="vae", revision=args.revision)
         global_step = int(args.pretrain_model.split("-")[-1])
-        first_epoch = global_step // num_update_steps_per_epoch
+        first_epoch = 0
     else:
         vae = AutoencoderKLTemporalDecoder.from_config("src/xray_decoder.json")
     
