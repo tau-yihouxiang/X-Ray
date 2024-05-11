@@ -13,7 +13,7 @@ from src.chamfer_distance import compute_trimesh_chamfer
 from scipy.sparse import csr_matrix
 import argparse
 from diffusers import AutoencoderKL
-from src.dataset import DiffusionDataset
+from src.dataset import UpsamplerDataset
 from src.xray_decoder import AutoencoderKLTemporalDecoder
 
 
@@ -80,7 +80,7 @@ def load_depths(depths_path):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("SVD Depth Inference")
-    parser.add_argument("--exp", type=str, default="Objaverse_80K_upsampler", help="experiment name")
+    parser.add_argument("--exp", type=str, default="Objaverse_80K_up_svd64_2", help="experiment name")
     parser.add_argument("--data_root", type=str, default="Data/Objaverse_XRay", help="data root")
     args = parser.parse_args()
 
@@ -105,33 +105,22 @@ if __name__ == "__main__":
     height = 256
     width = 256
 
-    val_dataset = DiffusionDataset(xray_root, height, num_frames=8, near=near, far=far, phase="val")
-    depth_paths = val_dataset.depth_paths[::50]
-    image_paths = [path.replace("depths", "images").replace(".npz", ".png") for path in depth_paths]
+    val_dataset = UpsamplerDataset(xray_root, height, num_frames=8, near=near, far=far, phase="val")
 
     all_chamfer_distance = []
-    progress_bar =  tqdm(range(len(image_paths)))
+    progress_bar =  tqdm(range(min(500, len(val_dataset))))
     for i in progress_bar:
-        image_path = image_paths[i]
+        image_path = val_dataset[i]["image_path"]
         uid = image_path.split("/")[-2]
 
         with torch.no_grad():
-            depth_path = image_path.replace("images", "depths").replace(".png", ".npz")
-            depths = load_depths(depth_path)
-            xray = torch.from_numpy(depths).float()[:8]  # [8, 7, H, W]
-            hit = (xray[:, 0:1] > 0).clone().float() * 2 - 1
-            xray[:, 0] = (xray[:, 0] - near) / (far - near) * 2 - 1 # (0-0.6) / (2.4 - 0.6) = -0.3333
-            xray[:, 1:4] = F.normalize(xray[:, 1:4], dim=1)
-            xray[:, 4:7] = xray[:, 4:7] * 2 - 1
-            xray = torch.cat([xray[:, 0:1], xray[:, 4:7], hit], dim=1)
-            xray_low = torch.nn.functional.interpolate(xray, size=(height // 4, width // 4), mode="nearest")[None].cuda()
+            xray_lr = val_dataset[i]["xray_lr"][None].to(vae.device)
+            xray_lr = xray_lr + torch.randn_like(xray_lr) * random.uniform(0, 1) * 0.1
 
-            xray_low = xray_low + torch.randn_like(xray_low) * random.uniform(0, 1) * 0.1
-
-            image = load_image(image_path).resize((width, height), Image.BILINEAR)
+            image = load_image(image_path).resize((width * 2, height * 2), Image.BILINEAR)
             mask = image.split()[-1]
             mask = (np.array(mask) / 255 > 0.5).astype(np.float32)
-            if mask.sum() < 64 * 64: # filter invalid image
+            if (mask.sum() / (mask.shape[0] * mask.shape[1])) < 0.05: # filter invalid image
                 continue
             image = image.convert("RGB")
 
@@ -140,9 +129,9 @@ if __name__ == "__main__":
 
             # Concatenate the `conditional_latents` with the `noisy_latents`.
             conditional_latents = conditional_latents.unsqueeze(
-                1).repeat(1, xray_low.shape[1], 1, 1, 1).float()
+                1).repeat(1, xray_lr.shape[1], 1, 1, 1).float()
             xray_input = torch.cat(
-                [xray_low, conditional_latents], dim=2)
+                [xray_lr, conditional_latents], dim=2)
             
             xray_input = xray_input.flatten(0, 1)
             model_pred = vae(xray_input, num_frames=num_frames).sample
@@ -151,8 +140,6 @@ if __name__ == "__main__":
 
         os.makedirs(f"Output/{exp_name}/evaluate", exist_ok=True)
         img = Image.open(image_path).resize((width * 2, height * 2), Image.BILINEAR)
-        # img_write = Image.new("RGB", img.size, (255, 255, 255))
-        # img_write.paste(img, mask=img.split()[3]) # 3 is the alpha channel
         img.save(f"Output/{exp_name}/evaluate/{uid}_original.png")
 
         GenDepths = (outputs[:, 0:1] * 0.5 + 0.5) * (far - near) + near
@@ -175,7 +162,7 @@ if __name__ == "__main__":
         GenColors = GenColors.cpu().numpy()
 
         gen_pts, gen_normals, gen_colors = depth_to_pcd_normals(GenDepths, GenNormals, GenColors)
-        # gen_pts[:, 2] += 1.5
+        gen_pts = gen_pts - np.mean(gen_pts, axis=0)
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(gen_pts)
         pcd.normals = o3d.utility.Vector3dVector(gen_normals)
@@ -190,7 +177,7 @@ if __name__ == "__main__":
         GtNormals = xray[:, 1:4]
         GtColors = xray[:, 4:7]
         gt_pts, gt_normals, gt_colors = depth_to_pcd_normals(GtDepths, GtNormals, GtColors)
-        # gt_pts[:, 2] += 1.5
+        gt_pts = gt_pts - np.mean(gt_pts, axis=0)
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(gt_pts)
         pcd.normals = o3d.utility.Vector3dVector(gt_normals)

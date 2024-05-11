@@ -130,7 +130,7 @@ if __name__ == "__main__":
             image = load_image(image_path).resize((width * 8, height * 8), Image.BILINEAR)
             mask = image.split()[-1]
             mask = (np.array(mask) / 255 > 0.5).astype(np.float32)
-            if mask.sum() / (height * width) < 0.05: # the image is invalid for object is too small
+            if (mask.sum() / (mask.shape[0] * mask.shape[1])) < 0.05: # filter invalid image
                 continue
             image = image.convert("RGB")
             outputs = pipe(image,
