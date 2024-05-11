@@ -1,11 +1,11 @@
 #/bin/bash
 
 export MODEL_NAME="stabilityai/stable-video-diffusion-img2vid"
-export OUTPUT_DIR="Output/Objaverse_80K_diffusion"
-export INSTANCE_DIR="Data/Objaverse_XRay"
-export NUM_GPUS=1
+export OUTPUT_DIR="Output/ShapeNetV2_Car_Upsampler"
+export INSTANCE_DIR="Data/ShapeNetV2_Car"
+export NUM_GPUS=4
 
-CUDA_VISIBLE_DEVICES=2 accelerate launch \
+CUDA_VISIBLE_DEVICES=0,1,2,3 accelerate launch \
     --main_process_port=29500 --num_processes=${NUM_GPUS} train_diffusion.py \
     --pretrained_model_name_or_path=${MODEL_NAME} \
     --data_root=${INSTANCE_DIR} \

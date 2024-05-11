@@ -567,9 +567,9 @@ def main():
     # DataLoaders creation:
     args.global_batch_size = args.per_gpu_batch_size * accelerator.num_processes
 
-    train_dataset = UpsamplerDataset(args.data_root, args.height, args.num_frames, near=0.6, far=2.4, phase="train")
+    train_dataset = UpsamplerDataset(args.data_root, args.height, args.num_frames, near=args.near, far=args.far, phase="train")
     train_dataset[0]
-    val_dataset = UpsamplerDataset(args.data_root, args.height, args.num_frames, near=0.6, far=2.4, phase="val")
+    val_dataset = UpsamplerDataset(args.data_root, args.height, args.num_frames, near=args.near, far=args.far, phase="val")
     sampler = RandomSampler(train_dataset)
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset,
@@ -661,27 +661,27 @@ def main():
         for step, batch in enumerate(train_dataloader):
 
             with accelerator.accumulate(vae):
-                xray_low = batch["xray_low"].to(weight_dtype).to(
+                xray_lr = batch["xray_lr"].to(weight_dtype).to(
                 accelerator.device, non_blocking=True)
 
-                xray_low = xray_low + torch.randn_like(xray_low) * random.uniform(0, 1) * 0.1
+                xray_lr = xray_lr + torch.randn_like(xray_lr) * random.uniform(0, 1) * 0.1
 
-                xray_high = batch["xray_high"].to(weight_dtype).to(
+                xray_hr = batch["xray_hr"].to(weight_dtype).to(
                     accelerator.device, non_blocking=True
                 )
                 conditional_pixel_values = batch["image_values"].to(weight_dtype).to(
                     accelerator.device, non_blocking=True)
 
-                # save xray_low and conditional_pixel_values as images.
+                # save xray_lr and conditional_pixel_values as images.
                 if global_step % 100 == 0 and accelerator.is_main_process:
                     os.makedirs(os.path.join(args.output_dir, "samples"), exist_ok=True)
-                    torchvision.utils.save_image(xray_low[0, :, 0:1], os.path.join(args.output_dir, "samples", "depths_low.png"), normalize=True, nrow=4)
-                    torchvision.utils.save_image(xray_low[0, :, 1:4], os.path.join(args.output_dir, "samples", "colors_low.png"), normalize=True, nrow=4)
-                    torchvision.utils.save_image(xray_high[0, :, 0:1], os.path.join(args.output_dir, "samples", "depths_high.png"), normalize=True, nrow=4)
-                    torchvision.utils.save_image(xray_high[0, :, 1:4], os.path.join(args.output_dir, "samples", "normals_high.png"), normalize=True, nrow=4)
-                    torchvision.utils.save_image(xray_high[0, :, 4:7], os.path.join(args.output_dir, "samples", "colors_high.png"), normalize=True, nrow=4)
+                    torchvision.utils.save_image(xray_lr[0, :, 0:1], os.path.join(args.output_dir, "samples", "depths_low.png"), normalize=True, nrow=4)
+                    torchvision.utils.save_image(xray_lr[0, :, 1:4], os.path.join(args.output_dir, "samples", "colors_low.png"), normalize=True, nrow=4)
+                    torchvision.utils.save_image(xray_hr[0, :, 0:1], os.path.join(args.output_dir, "samples", "depths_high.png"), normalize=True, nrow=4)
+                    torchvision.utils.save_image(xray_hr[0, :, 1:4], os.path.join(args.output_dir, "samples", "normals_high.png"), normalize=True, nrow=4)
+                    torchvision.utils.save_image(xray_hr[0, :, 4:7], os.path.join(args.output_dir, "samples", "colors_high.png"), normalize=True, nrow=4)
                     torchvision.utils.save_image(conditional_pixel_values[0:1], os.path.join(args.output_dir, "samples", "images.png"), normalize=True)
-                    # visual = torch.nn.functional.interpolate(xray_low[0, :1, :1], (args.height, args.width))
+                    # visual = torch.nn.functional.interpolate(xray_lr[0, :1, :1], (args.height, args.width))
                     # visual = visual.clip(-1, 1)
                     # visual = (visual + conditional_pixel_values[0:1]) / 2
                     # torchvision.utils.save_image(visual, os.path.join(args.output_dir, "samples", "pixel_value_alighed.png"), normalize=True)
@@ -691,9 +691,9 @@ def main():
 
                 # Concatenate the `conditional_latents` with the `noisy_latents`.
                 conditional_latents = conditional_latents.unsqueeze(
-                    1).repeat(1, xray_low.shape[1], 1, 1, 1)
+                    1).repeat(1, xray_lr.shape[1], 1, 1, 1)
                 xray_input = torch.cat(
-                    [xray_low, conditional_latents], dim=2)
+                    [xray_lr, conditional_latents], dim=2)
 
                 with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=True, enable_mem_efficient=False):
                     xray_input = xray_input.flatten(0, 1)
@@ -701,11 +701,11 @@ def main():
                     model_pred = model_pred.reshape(-1, args.num_frames, *model_pred.shape[1:])
                 # MSE loss
 
-                xray_high = xray_high.float()
-                H = (xray_high[:, :, -1:] > 0.0).detach().expand(-1, -1, 7, -1, -1)
-                hit_loss = F.binary_cross_entropy_with_logits(model_pred[:, :, -1:], xray_high[:, :, -1:] * 0.5 + 0.5)
-                surface_loss = F.mse_loss(model_pred[:, :, :-1][H], xray_high[:, :, :-1][H])
-                # recon_loss = 0.1 * F.mse_loss(model_pred, xray_high)
+                xray_hr = xray_hr.float()
+                H = (xray_hr[:, :, -1:] > 0.0).detach().expand(-1, -1, 7, -1, -1)
+                hit_loss = F.binary_cross_entropy_with_logits(model_pred[:, :, -1:], xray_hr[:, :, -1:] * 0.5 + 0.5)
+                surface_loss = F.mse_loss(model_pred[:, :, :-1][H], xray_hr[:, :, :-1][H])
+                # recon_loss = 0.1 * F.mse_loss(model_pred, xray_hr)
                 loss = hit_loss + surface_loss
 
                 # Gather the losses across all processes for logging (if we use distributed training).
@@ -778,18 +778,18 @@ def main():
                         with torch.no_grad():
                             val_image_paths = val_dataset.depth_paths[:args.num_validation_images]
                             for val_img_idx in range(args.num_validation_images):
-                                xray_low = val_dataset[val_img_idx]["xray_low"].to(accelerator.device, dtype=weight_dtype)[None]
-                                xray_low = xray_low + torch.randn_like(xray_low) * random.uniform(0, 1) * 0.1
+                                xray_lr = val_dataset[val_img_idx]["xray_lr"].to(accelerator.device, dtype=weight_dtype)[None]
+                                xray_lr = xray_lr + torch.randn_like(xray_lr) * random.uniform(0, 1) * 0.1
 
-                                xray_low_0 = xray_low[0]
-                                GenDepths = (xray_low_0[:, 0:1] * 0.5 + 0.5) * (args.far - args.near) + args.near
+                                xray_lr_0 = xray_lr[0]
+                                GenDepths = (xray_lr_0[:, 0:1] * 0.5 + 0.5) * (args.far - args.near) + args.near
                                 GenHits = ((GenDepths > args.near) * (GenDepths < args.far)).float()
                                 GenDepths[GenHits == 0] = 0
                                 GenDepths[GenDepths <= args.near] = 0
                                 GenDepths[GenDepths >= args.far] = 0
-                                GenNormals = F.normalize(xray_low_0[:, 1:4], dim=1)
+                                GenNormals = F.normalize(xray_lr_0[:, 1:4], dim=1)
                                 GenNormals[GenHits.repeat(1, 3, 1, 1) == 0] = 0
-                                GenColors = (xray_low_0[:, 1:4] * 0.5 + 0.5).clip(0, 1)
+                                GenColors = (xray_lr_0[:, 1:4] * 0.5 + 0.5).clip(0, 1)
                                 GenColors[GenHits.repeat(1, 3, 1, 1) == 0] = 0
                                 GenDepths = GenDepths.cpu().numpy()
                                 GenNormals = GenNormals.cpu().numpy()
@@ -810,9 +810,9 @@ def main():
 
                                 # Concatenate the `conditional_latents` with the `noisy_latents`.
                                 conditional_latents = conditional_latents.unsqueeze(
-                                    1).repeat(1, xray_low.shape[1], 1, 1, 1)
+                                    1).repeat(1, xray_lr.shape[1], 1, 1, 1)
                                 xray_input = torch.cat(
-                                    [xray_low, conditional_latents], dim=2)
+                                    [xray_lr, conditional_latents], dim=2)
                                 
                                 xray_input = xray_input.flatten(0, 1)
                                 model_pred = vae(xray_input, num_frames=args.num_frames).sample

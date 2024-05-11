@@ -50,7 +50,7 @@ class DiffusionDataset(Dataset):
             idx (int): Index of the sample to return.
 
         Returns:
-            dict: A dictionary containing the 'xray_low' tensor of shape (16, channels, 320, 512).
+            dict: A dictionary containing the 'xray_lr' tensor of shape (16, channels, 320, 512).
         """
         try:
             sample = {}
@@ -130,7 +130,7 @@ class UpsamplerDataset(Dataset):
             idx (int): Index of the sample to return.
 
         Returns:
-            dict: A dictionary containing the 'xray_low' tensor of shape (16, channels, 320, 512).
+            dict: A dictionary containing the 'xray_lr' tensor of shape (16, channels, 320, 512).
         """
         try:
             sample = {}
@@ -146,10 +146,10 @@ class UpsamplerDataset(Dataset):
             xray[:, 4:7] = xray[:, 4:7] * 2 - 1
             xray = torch.cat([xray, hit], dim=1)
             
-            sample["xray_high"] = torch.nn.functional.interpolate(xray, size=(self.size, self.size), mode="nearest")
-            xray_low = xray.clone()
-            xray_low = torch.cat([xray_low[:, 0:1], xray_low[:, 4:]], dim=1)
-            sample["xray_low"] = torch.nn.functional.interpolate(xray_low, size=(self.size // 4, self.size // 4), mode="nearest")
+            sample["xray_hr"] = torch.nn.functional.interpolate(xray, size=(self.size, self.size), mode="nearest")
+            xray_lr = xray.clone()
+            xray_lr = torch.cat([xray_lr[:, 0:1], xray_lr[:, 4:]], dim=1)
+            sample["xray_lr"] = torch.nn.functional.interpolate(xray_lr, size=(self.size // 4, self.size // 4), mode="nearest")
 
             # read condition image
             image_path = depth_path.replace("depths", "images").replace(".npz", ".png")
