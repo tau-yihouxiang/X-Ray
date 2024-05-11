@@ -3,9 +3,9 @@
 export MODEL_NAME="stabilityai/stable-video-diffusion-img2vid"
 export OUTPUT_DIR="Output/Objaverse_80K_upsampler"
 export INSTANCE_DIR="Data/Objaverse_XRay"
-export NUM_GPUS=2
+export NUM_GPUS=3
 
-CUDA_VISIBLE_DEVICES=0,1 accelerate launch \
+CUDA_VISIBLE_DEVICES=0,1,3 accelerate launch \
     --main_process_port=29500 --num_processes=${NUM_GPUS} train_upsampler.py \
     --pretrained_model_name_or_path=${MODEL_NAME} \
     --data_root=${INSTANCE_DIR} \

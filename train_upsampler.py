@@ -48,7 +48,7 @@ from diffusers.optimization import get_scheduler
 from diffusers.utils import check_min_version, deprecate, is_wandb_available, load_image
 from diffusers import AutoencoderKL
 import open3d as o3d
-from src.dataset import UpsamplerDataset
+from src.dataset import DiffusionDataset
 
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
 check_min_version("0.24.0.dev0")
@@ -567,9 +567,9 @@ def main():
     # DataLoaders creation:
     args.global_batch_size = args.per_gpu_batch_size * accelerator.num_processes
 
-    train_dataset = UpsamplerDataset(args.data_root, args.height, args.num_frames, near=args.near, far=args.far, phase="train")
+    train_dataset = DiffusionDataset(args.data_root, args.height, args.num_frames, near=args.near, far=args.far, phase="train")
     train_dataset[0]
-    val_dataset = UpsamplerDataset(args.data_root, args.height, args.num_frames, near=args.near, far=args.far, phase="val")
+    val_dataset = DiffusionDataset(args.data_root, args.height, args.num_frames, near=args.near, far=args.far, phase="val")
     sampler = RandomSampler(train_dataset)
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset,
@@ -663,10 +663,9 @@ def main():
             with accelerator.accumulate(vae):
                 xray_lr = batch["xray_lr"].to(weight_dtype).to(
                 accelerator.device, non_blocking=True)
-
                 xray_lr = xray_lr + torch.randn_like(xray_lr) * random.uniform(0, 1) * 0.1
 
-                xray_hr = batch["xray_hr"].to(weight_dtype).to(
+                xray = batch["xray"].to(weight_dtype).to(
                     accelerator.device, non_blocking=True
                 )
                 conditional_pixel_values = batch["image_values"].to(weight_dtype).to(
@@ -677,9 +676,9 @@ def main():
                     os.makedirs(os.path.join(args.output_dir, "samples"), exist_ok=True)
                     torchvision.utils.save_image(xray_lr[0, :, 0:1], os.path.join(args.output_dir, "samples", "depths_low.png"), normalize=True, nrow=4)
                     torchvision.utils.save_image(xray_lr[0, :, 1:4], os.path.join(args.output_dir, "samples", "colors_low.png"), normalize=True, nrow=4)
-                    torchvision.utils.save_image(xray_hr[0, :, 0:1], os.path.join(args.output_dir, "samples", "depths_high.png"), normalize=True, nrow=4)
-                    torchvision.utils.save_image(xray_hr[0, :, 1:4], os.path.join(args.output_dir, "samples", "normals_high.png"), normalize=True, nrow=4)
-                    torchvision.utils.save_image(xray_hr[0, :, 4:7], os.path.join(args.output_dir, "samples", "colors_high.png"), normalize=True, nrow=4)
+                    torchvision.utils.save_image(xray[0, :, 0:1], os.path.join(args.output_dir, "samples", "depths_high.png"), normalize=True, nrow=4)
+                    torchvision.utils.save_image(xray[0, :, 1:4], os.path.join(args.output_dir, "samples", "normals_high.png"), normalize=True, nrow=4)
+                    torchvision.utils.save_image(xray[0, :, 4:7], os.path.join(args.output_dir, "samples", "colors_high.png"), normalize=True, nrow=4)
                     torchvision.utils.save_image(conditional_pixel_values[0:1], os.path.join(args.output_dir, "samples", "images.png"), normalize=True)
                     # visual = torch.nn.functional.interpolate(xray_lr[0, :1, :1], (args.height, args.width))
                     # visual = visual.clip(-1, 1)
@@ -699,13 +698,13 @@ def main():
                     xray_input = xray_input.flatten(0, 1)
                     model_pred = vae(xray_input, num_frames=args.num_frames).sample
                     model_pred = model_pred.reshape(-1, args.num_frames, *model_pred.shape[1:])
+                
                 # MSE loss
-
-                xray_hr = xray_hr.float()
-                H = (xray_hr[:, :, -1:] > 0.0).detach().expand(-1, -1, 7, -1, -1)
-                hit_loss = F.binary_cross_entropy_with_logits(model_pred[:, :, -1:], xray_hr[:, :, -1:] * 0.5 + 0.5)
-                surface_loss = F.mse_loss(model_pred[:, :, :-1][H], xray_hr[:, :, :-1][H])
-                # recon_loss = 0.1 * F.mse_loss(model_pred, xray_hr)
+                xray = xray.float()
+                H = (xray[:, :, -1:] > 0.0).detach().expand(-1, -1, 7, -1, -1)
+                hit_loss = F.binary_cross_entropy_with_logits(model_pred[:, :, -1:], xray[:, :, -1:] * 0.5 + 0.5)
+                surface_loss = F.mse_loss(model_pred[:, :, :-1][H], xray[:, :, :-1][H])
+                # recon_loss = 0.1 * F.mse_loss(model_pred, xray)
                 loss = hit_loss + surface_loss
 
                 # Gather the losses across all processes for logging (if we use distributed training).
