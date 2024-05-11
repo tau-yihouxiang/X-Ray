@@ -81,14 +81,19 @@ if __name__ == "__main__":
     parser.add_argument("--exp", type=str, default="ShapeNetV2_Car", help="experiment name")
     parser.add_argument("--model_id", type=str, default="stabilityai/stable-video-diffusion-img2vid")
     parser.add_argument("--data_root", type=str, default="Data/ShapeNetV2_Car", help="data root")
-    parser.add_argument("--near", type=float, default=0.5, help="near")
-    parser.add_argument("--far", type=float, default=1.5, help="far")
 
     args = parser.parse_args()
 
     exp_name = args.exp
     model_id = args.model_id
     xray_root = args.data_root
+
+    if "shapenet" in args.data_root.lower():
+        near = 0.5
+        far = 1.5
+    else:
+        near = 0.6
+        far = 2.4
 
     pipe = StableVideoDiffusionPipeline.from_pretrained(model_id, 
                                 torch_dtype=torch.float16, variant="fp16").to("cuda")
@@ -109,7 +114,7 @@ if __name__ == "__main__":
     height = 64
     width = 64
 
-    val_dataset = DiffusionDataset(xray_root, height, num_frames=8, near=args.near, far=args.far, phase="val")
+    val_dataset = DiffusionDataset(xray_root, height, num_frames=8, near=near, far=far, phase="val")
     depth_paths = val_dataset.depth_paths[::50]
     image_paths = [path.replace("depths", "images").replace(".npz", ".png") for path in depth_paths]
 
@@ -127,7 +132,7 @@ if __name__ == "__main__":
             image = load_image(image_path).resize((width * 8, height * 8), Image.BILINEAR)
             mask = image.split()[-1]
             mask = (np.array(mask) / 255 > 0.5).astype(np.float32)
-            if mask.sum() < 64 * 64:
+            if mask.sum() / (height * width) < 0.05: # the image is invalid for object is too small
                 continue
             image = image.convert("RGB")
             outputs = pipe(image,
@@ -142,9 +147,9 @@ if __name__ == "__main__":
             outputs = outputs.clamp(-1, 1) # clamp to [-1, 1]
 
         image.save(f"Output/{exp_name}/evaluate/{uid}_original.png")
-        GenDepths = (outputs[:, 0:1].cpu().numpy() * 0.5 + 0.5) * (args.far - args.near) + args.near
-        GenDepths[GenDepths <= args.near] = 0
-        GenDepths[GenDepths >= args.far] = 0
+        GenDepths = (outputs[:, 0:1].cpu().numpy() * 0.5 + 0.5) * (far - near) + near
+        GenDepths[GenDepths <= near] = 0
+        GenDepths[GenDepths >= far] = 0
         GenDepths_ori = GenDepths.copy()
         for i in range(GenDepths.shape[0]-1):
             GenDepths[i+1] = np.where(GenDepths_ori[i+1] < GenDepths_ori[i], 0, GenDepths_ori[i+1])
