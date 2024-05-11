@@ -14,7 +14,7 @@
   ],
   "force_upcast": false,
   "in_channels": 4,
-  "latent_channels": 9,
+  "latent_channels": 12,
   "layers_per_block": 2,
   "out_channels": 8,
   "sample_size": 768,

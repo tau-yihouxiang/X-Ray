@@ -1,8 +1,8 @@
 #/bin/bash
 
 export MODEL_NAME="stabilityai/stable-video-diffusion-img2vid"
-export OUTPUT_DIR="Output/Objaverse_80K_upsampler"
-export INSTANCE_DIR="Data/Objaverse_XRay"
+export OUTPUT_DIR="Output/ShapeNetV2_Car_upsampler"
+export INSTANCE_DIR="Data/ShapeNetV2_Car"
 export NUM_GPUS=3
 
 CUDA_VISIBLE_DEVICES=0,1,3 accelerate launch \
@@ -10,7 +10,7 @@ CUDA_VISIBLE_DEVICES=0,1,3 accelerate launch \
     --pretrained_model_name_or_path=${MODEL_NAME} \
     --data_root=${INSTANCE_DIR} \
     --output_dir=${OUTPUT_DIR} \
-    --per_gpu_batch_size=2 --gradient_accumulation_steps=1 \
+    --per_gpu_batch_size=1 --gradient_accumulation_steps=1 \
     --max_train_steps=10000000 \
     --width=256 \
     --height=256 \

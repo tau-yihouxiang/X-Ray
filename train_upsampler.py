@@ -48,7 +48,7 @@ from diffusers.optimization import get_scheduler
 from diffusers.utils import check_min_version, deprecate, is_wandb_available, load_image
 from diffusers import AutoencoderKL
 import open3d as o3d
-from src.dataset import DiffusionDataset
+from src.dataset import UpsamplerDataset
 
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
 check_min_version("0.24.0.dev0")
@@ -567,9 +567,9 @@ def main():
     # DataLoaders creation:
     args.global_batch_size = args.per_gpu_batch_size * accelerator.num_processes
 
-    train_dataset = DiffusionDataset(args.data_root, args.height, args.num_frames, near=args.near, far=args.far, phase="train")
+    train_dataset = UpsamplerDataset(args.data_root, args.height, args.num_frames, near=args.near, far=args.far, phase="train")
     train_dataset[0]
-    val_dataset = DiffusionDataset(args.data_root, args.height, args.num_frames, near=args.near, far=args.far, phase="val")
+    val_dataset = UpsamplerDataset(args.data_root, args.height, args.num_frames, near=args.near, far=args.far, phase="val")
     sampler = RandomSampler(train_dataset)
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset,
@@ -663,6 +663,7 @@ def main():
             with accelerator.accumulate(vae):
                 xray_lr = batch["xray_lr"].to(weight_dtype).to(
                 accelerator.device, non_blocking=True)
+
                 xray_lr = xray_lr + torch.randn_like(xray_lr) * random.uniform(0, 1) * 0.1
 
                 xray = batch["xray"].to(weight_dtype).to(
@@ -698,8 +699,8 @@ def main():
                     xray_input = xray_input.flatten(0, 1)
                     model_pred = vae(xray_input, num_frames=args.num_frames).sample
                     model_pred = model_pred.reshape(-1, args.num_frames, *model_pred.shape[1:])
-                
                 # MSE loss
+
                 xray = xray.float()
                 H = (xray[:, :, -1:] > 0.0).detach().expand(-1, -1, 7, -1, -1)
                 hit_loss = F.binary_cross_entropy_with_logits(model_pred[:, :, -1:], xray[:, :, -1:] * 0.5 + 0.5)
