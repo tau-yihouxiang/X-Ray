@@ -56,7 +56,6 @@ $ bash scripts/train_upsampler.sh
 ```bash
 $ python evaluate_diffusion.py --exp expname --date_root Data/Objaverse_XRay
 $ python evaluate_upsampler.py --exp expname --date_root Data/Objaverse_XRay
-$ python evaluate_full.py --exp expname --date_root Data/Objaverse_XRay
 ```
 
 ## Authors
