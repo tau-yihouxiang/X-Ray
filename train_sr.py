@@ -879,7 +879,7 @@ def main():
 
             with accelerator.accumulate(unet):
                 # first, convert images to latent space.
-                xray_hr = batch["xray_hr"].to(weight_dtype).to(
+                xray = batch["xray"].to(weight_dtype).to(
                     accelerator.device, non_blocking=True
                 )
 
@@ -889,19 +889,19 @@ def main():
                 conditional_pixel_values = batch["image_values"].to(weight_dtype).to(
                     accelerator.device, non_blocking=True)
 
-                # save xray_hr and conditional_pixel_values as images.
+                # save xray and conditional_pixel_values as images.
                 if global_step % 50 == 0 and accelerator.is_main_process:
                     os.makedirs(os.path.join(args.output_dir, "samples"), exist_ok=True)
-                    torchvision.utils.save_image(xray_hr[0, :, 0:1], os.path.join(args.output_dir, "samples", "depths.png"), normalize=True, nrow=4)
-                    torchvision.utils.save_image(xray_hr[0, :, 1:4], os.path.join(args.output_dir, "samples", "normals.png"), normalize=True, nrow=4)
-                    torchvision.utils.save_image(xray_hr[0, :, 4:7], os.path.join(args.output_dir, "samples", "colors.png"), normalize=True, nrow=4)
+                    torchvision.utils.save_image(xray[0, :, 0:1], os.path.join(args.output_dir, "samples", "depths.png"), normalize=True, nrow=4)
+                    torchvision.utils.save_image(xray[0, :, 1:4], os.path.join(args.output_dir, "samples", "normals.png"), normalize=True, nrow=4)
+                    torchvision.utils.save_image(xray[0, :, 4:7], os.path.join(args.output_dir, "samples", "colors.png"), normalize=True, nrow=4)
                     torchvision.utils.save_image(conditional_pixel_values[0:1], os.path.join(args.output_dir, "samples", "images.png"), normalize=True)
-                    visual = torch.nn.functional.interpolate(xray_hr[0, :1, :1], (args.height*8, args.width*8))
+                    visual = torch.nn.functional.interpolate(xray[0, :1, :1], (args.height*8, args.width*8))
                     visual = visual.clip(-1, 1)
                     visual = (visual + conditional_pixel_values[0:1]) / 2
                     torchvision.utils.save_image(visual, os.path.join(args.output_dir, "samples", "pixel_value_aligned.png"), normalize=True)
 
-                latents = xray_hr
+                latents = xray
                 xray_lr = xray_lr + torch.randn_like(xray_lr) * random.uniform(0, 1) * 0.1
 
                 # Sample noise that we'll add to the latents
