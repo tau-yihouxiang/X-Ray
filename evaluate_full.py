@@ -78,8 +78,8 @@ def load_depths(depths_path):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("X-Ray full Inference")
-    parser.add_argument("--exp_upsampler", type=str, default="ShapeNetV2_Car_upsampler", help="experiment name")
-    parser.add_argument("--exp_diffusion", type=str, default="ShapeNetV2_Car", help="experiment name")
+    parser.add_argument("--exp_upsampler", type=str, default="Objaverse_80K_up_svd64_2", help="experiment name")
+    parser.add_argument("--exp_diffusion", type=str, default="Objaverse_XRay", help="experiment name")
     parser.add_argument("--data_root", type=str, default="Data/Objaverse_XRay", help="data root")
     args = parser.parse_args()
 
