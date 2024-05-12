@@ -87,6 +87,8 @@ if __name__ == "__main__":
     exp_name = args.exp_diffusion
     model_id = args.model_id
     xray_root = args.data_root
+    height = 64
+    width = 64
 
     if "shapenet" in args.data_root.lower():
         near = 0.5
@@ -94,6 +96,11 @@ if __name__ == "__main__":
     else:
         near = 0.6
         far = 2.4
+
+    if "gso" in args.data_root.lower():
+        val_dataset = DiffusionDataset(xray_root, height, num_frames=8, near=near, far=far, phase="all")
+    else:
+        val_dataset = DiffusionDataset(xray_root, height, num_frames=8, near=near, far=far, phase="val")
 
     pipe = StableVideoDiffusionPipeline.from_pretrained(model_id, 
                                 torch_dtype=torch.float16, variant="fp16").to("cuda")
@@ -111,10 +118,6 @@ if __name__ == "__main__":
             torch_dtype=torch.float16,
         ).to("cuda")
 
-    height = 64
-    width = 64
-
-    val_dataset = DiffusionDataset(xray_root, height, num_frames=8, near=near, far=far, phase="all")
 
     if os.path.exists(f"Output/{exp_name}/evaluate"):
         shutil.rmtree(f"Output/{exp_name}/evaluate")
@@ -131,7 +134,7 @@ if __name__ == "__main__":
             mask = image.split()[-1]
             mask = (np.array(mask) > 0).astype(np.float32)
             if (mask.sum() / (mask.shape[0] * mask.shape[1])) < 0.05: # filter invalid image
-                continue
+                import pdb; pdb.set_trace()
             image_rgb = image.convert("RGB")
             outputs = pipe(image_rgb,
                             height=height,
