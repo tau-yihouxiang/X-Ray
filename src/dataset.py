@@ -28,8 +28,10 @@ class DiffusionDataset(Dataset):
         if phase == "train":
             del self.depth_paths[::10]
             random.shuffle(self.depth_paths)
-        else:
+        elif phase == "val":
             self.depth_paths = self.depth_paths[::10]
+        else:
+            self.depth_paths = self.depth_paths
         self.num_samples = len(self.depth_paths)        
 
     def __len__(self):
@@ -109,9 +111,11 @@ class UpsamplerDataset(Dataset):
         sorted(self.depth_paths)
         if phase == "train":
             del self.depth_paths[::10]
-        else:
+            random.shuffle(self.depth_paths)
+        elif phase == "val":
             self.depth_paths = self.depth_paths[::10]
-        random.shuffle(self.depth_paths)
+        else:
+            self.depth_paths = self.depth_paths
         self.num_samples = len(self.depth_paths)        
 
     def __len__(self):

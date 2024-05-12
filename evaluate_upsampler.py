@@ -80,10 +80,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("X-Ray full Inference")
     parser.add_argument("--exp_upsampler", type=str, default="Objaverse_80K_up_svd64_2", help="experiment name")
     parser.add_argument("--exp_diffusion", type=str, default="Objaverse_XRay", help="experiment name")
-    parser.add_argument("--data_root", type=str, default="Data/Objaverse_XRay", help="data root")
     args = parser.parse_args()
 
-    if "shapenet" in args.data_root.lower():
+    if "shapenet" in args.exp_upsampler.lower():
         near = 0.5
         far = 1.5
     else:
@@ -93,7 +92,6 @@ if __name__ == "__main__":
 
     exp_upsampler = args.exp_upsampler
     exp_diffusion = args.exp_diffusion
-    xray_root = args.data_root
 
     if os.path.exists(f"Output/{exp_upsampler}/evaluate"):
         shutil.rmtree(f"Output/{exp_upsampler}/evaluate")

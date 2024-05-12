@@ -78,13 +78,13 @@ def load_depths(depths_path):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("SVD Depth Inference")
-    parser.add_argument("--exp", type=str, default="Objaverse_XRay", help="experiment name")
+    parser.add_argument("--exp_diffusion", type=str, default="Objaverse_XRay", help="experiment name")
     parser.add_argument("--data_root", type=str, default="Data/Objaverse_XRay", help="data root")
     parser.add_argument("--model_id", type=str, default="stabilityai/stable-video-diffusion-img2vid")
 
     args = parser.parse_args()
 
-    exp_name = args.exp
+    exp_name = args.exp_diffusion
     model_id = args.model_id
     xray_root = args.data_root
 
@@ -114,7 +114,7 @@ if __name__ == "__main__":
     height = 64
     width = 64
 
-    val_dataset = DiffusionDataset(xray_root, height, num_frames=8, near=near, far=far, phase="val")
+    val_dataset = DiffusionDataset(xray_root, height, num_frames=8, near=near, far=far, phase="all")
 
     if os.path.exists(f"Output/{exp_name}/evaluate"):
         shutil.rmtree(f"Output/{exp_name}/evaluate")
@@ -129,7 +129,7 @@ if __name__ == "__main__":
         with torch.no_grad():
             image = load_image(image_path).resize((width * 8, height * 8), Image.BILINEAR)
             mask = image.split()[-1]
-            mask = (np.array(mask) / 255 > 0.5).astype(np.float32)
+            mask = (np.array(mask) > 0).astype(np.float32)
             if (mask.sum() / (mask.shape[0] * mask.shape[1])) < 0.05: # filter invalid image
                 continue
             image_rgb = image.convert("RGB")
