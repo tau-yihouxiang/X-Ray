@@ -161,13 +161,17 @@ if __name__ == "__main__":
         pcd.points = o3d.utility.Vector3dVector(gen_pts)
         pcd.normals = o3d.utility.Vector3dVector(gen_normals)
         pcd.colors = o3d.utility.Vector3dVector(gen_colors)
-        o3d.io.write_point_cloud(f"Output/{exp_upsampler}/evaluate/{uid}_prd_up4x.ply", pcd)
+        o3d.io.write_point_cloud(f"Output/{exp_upsampler}/evaluate/{uid}_prd.ply", pcd)
 
         # copy prd ply to the folder
-        shutil.copy(image_path.replace(".png", "_prd.ply"), f"Output/{exp_upsampler}/evaluate/{uid}_prd.ply")
+        # shutil.copy(image_path.replace(".png", "_prd.ply"), f"Output/{exp_upsampler}/evaluate/{uid}_prd.ply")
         gt_pcd = o3d.io.read_point_cloud(image_path.replace(".png", "_gt.ply"))
         gt_pts = np.asarray(gt_pcd.points)
         gt_pts = gt_pts - np.mean(gt_pts, axis=0)
+
+        # update gt pts
+        gt_pcd.points = o3d.utility.Vector3dVector(gt_pts)
+        o3d.io.write_point_cloud(f"Output/{exp_upsampler}/evaluate/{uid}_gt.ply", gt_pcd)
 
         chamfer_distance = compute_trimesh_chamfer(gt_pts, gen_pts)
         all_chamfer_distance += [chamfer_distance]
