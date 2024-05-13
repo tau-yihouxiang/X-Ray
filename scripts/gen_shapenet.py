@@ -131,10 +131,8 @@ from multiprocessing import Pool
 
 def process_model(model_path):
     try:
-        # uid = os.path.basename(model_path)[:-4]
-        cate_id = model_path.split("/")[-4]
         obj_id = model_path.split("/")[-3]
-        json_path = os.path.join(img_dir, cate_id, obj_id, "transforms.json")
+        json_path = os.path.join(img_dir, obj_id, "transforms.json")
 
         if not os.path.exists(json_path):
             print("skip")
@@ -143,7 +141,7 @@ def process_model(model_path):
         meta = load_from_json(json_path)
         meta["frames"] = meta["frames"]
         
-        if os.path.exists(os.path.join(depth_dir, cate_id, obj_id, meta["frames"][-1]["file_path"][:-4] + ".npz")):
+        if os.path.exists(os.path.join(depth_dir, obj_id, meta["frames"][-1]["file_path"][:-4] + ".npz")):
             print("existed")
             return
         
@@ -176,7 +174,7 @@ def process_model(model_path):
         raycast = RaycastingImaging()
         
         for frame in (meta["frames"]):
-            os.makedirs(os.path.join(depth_dir, cate_id, obj_id), exist_ok=True)
+            os.makedirs(os.path.join(depth_dir, obj_id), exist_ok=True)
             # save image
             c2w = np.array(frame["c2w"])
 
@@ -184,9 +182,9 @@ def process_model(model_path):
             mesh_frame = mesh.copy().apply_transform(Rt)
 
             # # export mesh as ply using trimesh
-            # mesh_frame.export(os.path.join(depth_dir, cate_id, obj_id, frame["file_path"][:-4] + ".ply"))
+            # mesh_frame.export(os.path.join(depth_dir, obj_id, frame["file_path"][:-4] + ".ply"))
             # # copy image
-            # shutil.copy(os.path.join(img_dir, cate_id, obj_id, frame["file_path"]), os.path.join(depth_dir, cate_id, obj_id))
+            # shutil.copy(os.path.join(img_dir, obj_id, frame["file_path"]), os.path.join(depth_dir, obj_id))
             # import pdb; pdb.set_trace()
             # break
 
@@ -236,7 +234,7 @@ def process_model(model_path):
             # save GenDepths as a npy file
             sparse_matrix = csr_matrix(GenDepths.reshape(16, -1))
             
-            np.savez_compressed(os.path.join(depth_dir, cate_id, obj_id, frame["file_path"][:-4]), 
+            np.savez_compressed(os.path.join(depth_dir, obj_id, frame["file_path"][:-4]), 
                                 data=sparse_matrix.data, 
                                 indices=sparse_matrix.indices, 
                                 indptr=sparse_matrix.indptr, 
@@ -246,7 +244,7 @@ def process_model(model_path):
             # pcd.points = o3d.utility.Vector3dVector(points)
             # pcd.normals = o3d.utility.Vector3dVector(normals)
             # pcd.colors = o3d.utility.Vector3dVector(colors[:, :3])
-            # o3d.io.write_point_cloud(os.path.join(depth_dir, cate_id, obj_id, frame["file_path"][:-4] + ".ply"), pcd)
+            # o3d.io.write_point_cloud(os.path.join(depth_dir, obj_id, frame["file_path"][:-4] + ".ply"), pcd)
 
         print("saved")
     except Exception as e:
@@ -256,8 +254,8 @@ def process_model(model_path):
 
 if __name__ == "__main__":
     root_dir = "/data/taohu/Data/ShapeNet/ShapeNetCore.v2_Clean"
-    img_dir = "/data/taohu/Data/ShapeNet/dataset/images"
-    depth_dir = "/data/taohu/Data/ShapeNet/dataset/depths"
+    img_dir = "/data/taohu/Data/ShapeNet/ShapeNetV2_Car/images"
+    depth_dir = "/data/taohu/Data/ShapeNet/ShapeNetV2_Car/depths"
     image_height = 256
     image_width = 256
 
@@ -268,5 +266,5 @@ if __name__ == "__main__":
         for model_path in tqdm(model_paths):
             process_model(model_path)
     else:
-        with Pool(8) as p:
+        with Pool(2) as p:
             print(p.map(process_model, model_paths))

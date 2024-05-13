@@ -163,6 +163,8 @@ if __name__ == "__main__":
         pcd.colors = o3d.utility.Vector3dVector(gen_colors)
         o3d.io.write_point_cloud(f"Output/{exp_upsampler}/evaluate/{uid}_prd.ply", pcd)
 
+        shutil.copy(image_path.replace(".png", "_prd.ply"), f"Output/{exp_upsampler}/evaluate/{uid}_lr_prd.ply")
+
         # copy prd ply to the folder
         # shutil.copy(image_path.replace(".png", "_prd.ply"), f"Output/{exp_upsampler}/evaluate/{uid}_prd.ply")
         gt_pcd = o3d.io.read_point_cloud(image_path.replace(".png", "_gt.ply"))
