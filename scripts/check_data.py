@@ -1,5 +1,6 @@
 import glob
 import os
+import shutil
 import imageio
 import numpy as np
 import tqdm
@@ -41,11 +42,6 @@ def depth_to_pcd_normals(GenDepths, GenNormals, GenColors):
     i, j = grid[..., 1], grid[..., 0]
 
     directions = np.stack([(i-cx)/fx, -(j-cy)/fx, -np.ones_like(i)], -1) # (H, W, 3)
-
-    # c2w = np.array([[0, 0, 0, 1.5],
-    #             [0, 0, 0, 0],
-    #             [0, 1, 0, 0],
-    #             [0.0, 0.0, 0.0, 1.0]])
     c2w = np.eye(4).astype(np.float32)
 
     rays_origins, ray_directions = get_rays(directions, c2w)
@@ -76,73 +72,53 @@ def load_depths( depths_path):
 	restored_array = loaded_sparse_matrix.toarray().reshape(original_shape)
 	return restored_array
 
-instance_data_root = "Data/ShapeNet_Car/depths"
+instance_data_root = "Data/Objaverse_XRay/depths/a57dd10038a14ef8a141e0e7c3bc3e27"
+# mesh_dir = "/data/taohu/Data/ShapeNet/ShapeNetCore.v2/02958343"
 
 depths_paths = glob.glob(os.path.join(instance_data_root, "**/*.npz"), recursive=True)
 # shuffle
 random.shuffle(depths_paths)
 
 near = 0.6
-far = 2.4
+far = 1.8
 
 for depth_path in depths_paths:
     print(depth_path)
-    depths = load_depths(depth_path)
-    GenDepths = depths[:, 0:1]
-    GenNormals = depths[:, 1:4]
-    GenNormals = GenNormals / (np.linalg.norm(GenNormals, axis=1, keepdims=True) + 1e-8)
-    GenColors = depths[:, 4:7]
 
-    torchvision.utils.save_image(torch.tensor((GenDepths - near) / (far - near)), "Output/depths.png", nrow=4)
-    torchvision.utils.save_image(torch.tensor(GenNormals * 0.5 + 0.5), "Output/normals.png", nrow=4)
-    torchvision.utils.save_image(torch.tensor(GenColors), "Output/colors.png", nrow=4)
+    # depth_path = "Data/Objaverse_XRay/depths/a57dd10038a14ef8a141e0e7c3bc3e27/000.npz"
+
+    depths = load_depths(depth_path)
+    depths = torch.from_numpy(depths).float()
+    GenDepths = depths[:, 0:1].expand(-1, 3, -1, -1)
+    GenDepths = ((GenDepths - near) / (far - near)).clip(min=0, max=1)
+    GenNormals = depths[:, 1:4]
+    GenNormals = F.normalize(GenNormals, p=2, dim=1)
+    GenNormals = (GenNormals * 0.5 + 0.5).clip(min=0, max=1)
+    GenColors = depths[:, 4:7].clip(min=0, max=1)
+    GenHits = (GenDepths > 0).float()
+
+    # gray
+    GenDepths[GenHits == 0] = 1
+    GenNormals[GenHits == 0] = 1
+    GenColors[GenHits == 0] = 1
+
+    GenHits = 1 - GenHits
+    GenHits[GenHits == 0] = 0.5
+
+    XRay = torch.stack([GenHits, GenDepths, GenNormals, GenColors], dim=0)
+    XRay = XRay.reshape(4 * 16, 3, 256, 256)
+    torchvision.utils.save_image(XRay, "logs/xray.png", nrow=16, padding=0)
 
     # save image
     image_path = depth_path.replace("depths", "images").replace("npz", "png")
     image = Image.open(image_path)
-    image.save("Output/image.png")
-    
-    gen_pts, gen_normals, gen_colors = depth_to_pcd_normals(GenDepths, GenNormals, GenColors)
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(gen_pts)
-    pcd.normals = o3d.utility.Vector3dVector(gen_normals)
-    pcd.colors = o3d.utility.Vector3dVector(gen_colors)
-    o3d.io.write_point_cloud("Output/gt.ply", pcd)
+    # convert to rgba image to white color image using PIL
+    white_image = Image.new("RGB", image.size, "WHITE")
+    white_image.paste(image, (0, 0), image)
+    white_image.save("logs/image.png")
 
-    # save GenDepths, GenNormals, GenColors as a sequential video
-    GenDepths = GenDepths / (far - near)
-    GenHits = (GenDepths > 0).astype(np.float32)
-    GenNormals = GenNormals * 0.5 + 0.5
-    GenColors = GenColors
-
-    GenHits = GenHits * 255
-    GenDepths = GenDepths * 255
-    GenNormals = GenNormals * 255
-    GenColors = GenColors * 255
-
-    GenDepths = GenDepths.astype(np.uint8).transpose(0, 2, 3, 1).repeat(3, -1)
-    GenHits = GenHits.astype(np.uint8).transpose(0, 2, 3, 1).repeat(3, -1)
-    GenNormals = GenNormals.astype(np.uint8).transpose(0, 2, 3, 1)
-    GenColors = GenColors.astype(np.uint8).transpose(0, 2, 3, 1)
-
-    GenDepths[GenHits == 0] = 128
-    GenNormals[GenHits == 0] = 128
-    GenColors[GenHits == 0] = 128
-    GenHits[GenHits == 0] = 128 
-
-    # convert image background to white
-    image = image.resize((256, 256))
-    white_image = Image.new("RGB", image.size, (128, 128, 128))
-    # paste the image on the white background
-    white_image.paste(image, mask=image.split()[3])  
-    white_image = np.array(white_image)
-    # repeat the image to match the number of frames
-    white_image = white_image[None].repeat(GenHits.shape[0], 0)
-
-    GenXRay = np.concatenate([white_image, GenHits, GenDepths, GenNormals, GenColors], axis=2)
-    imageio.mimsave('Output/xray.gif', GenXRay, loop=1024, format='GIF', fps=1)  # 'duration' controls the frame timing in seconds
-    # imageio.mimsave('Output/hits.gif', GenHits, format='GIF', fps=2)  # 'duration' controls the frame timing in seconds
-    # imageio.mimsave('Output/depths.gif', GenDepths, format='GIF', fps=2)  # 'duration' controls the frame timing in seconds
-    # imageio.mimsave('Output/normals.gif', GenNormals, format='GIF', fps=2)  # 'duration' controls the frame timing in seconds
-    # imageio.mimsave('Output/colors.gif', GenColors, format='GIF', fps=2)  # 'duration' controls the frame timing in seconds
+    # # copy mesh file to logs
+    # mesh_path = os.path.join(mesh_dir, depth_path.split("/")[-2], "models")
+    # # copy mesh path to logs
+    # shutil.copytree(mesh_path, "logs/mesh")
     import pdb; pdb.set_trace()

@@ -160,11 +160,11 @@ def process_model(model_path):
         trimesh.repair.fix_winding(mesh)
 
         box_min, box_max = mesh.bounds
-        # scale = np.max(np.abs(box_max - box_min))
-        # mesh.apply_scale(1.1)
+        scale = 1 / np.max(np.abs(box_max - box_min))
+        mesh.apply_scale(scale)
 
         box_min, box_max = mesh.bounds
-        center = 0.0 * (box_min + box_max) / 2
+        center = (box_min + box_max) / 2
         mesh.apply_translation(-center)
 
         mesh.visual = mesh.visual.to_color()
@@ -266,5 +266,5 @@ if __name__ == "__main__":
         for model_path in tqdm(model_paths):
             process_model(model_path)
     else:
-        with Pool(2) as p:
+        with Pool(6) as p:
             print(p.map(process_model, model_paths))

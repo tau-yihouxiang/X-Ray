@@ -13,7 +13,8 @@ import open3d as o3d
 import torch.nn.functional as F
 import shutil
 from tqdm import tqdm
-from src.chamfer_distance import compute_trimesh_chamfer
+# from src.chamfer_distance import compute_trimesh_chamfer
+from src.metrics import chamfer_distance_and_f_score
 from scipy.sparse import csr_matrix
 import argparse
 
@@ -124,6 +125,7 @@ if __name__ == "__main__":
     os.makedirs(f"Output/{exp_name}/evaluate", exist_ok=True)
 
     all_chamfer_distance = []
+    all_f_score = []
     progress_bar =  tqdm(range(min(500, len(val_dataset))))
     for i in progress_bar:
         image_path = val_dataset[i]["image_path"]
@@ -180,14 +182,16 @@ if __name__ == "__main__":
         pcd_gt.colors = o3d.utility.Vector3dVector(gt_colors)
 
         # normalize gt_pts and gen_pts
-        chamfer_distance = compute_trimesh_chamfer(gt_pts, gen_pts)
+        chamfer_distance, f_score = chamfer_distance_and_f_score(gt_pts, gen_pts, 0.1)
         # if chamfer_distance is valid
         all_chamfer_distance += [chamfer_distance]
+        all_f_score += [f_score]
         # save
         image.save(f"Output/{exp_name}/evaluate/{uid}.png")
         o3d.io.write_point_cloud(f"Output/{exp_name}/evaluate/{uid}_prd.ply", pcd_gen)
         o3d.io.write_point_cloud(f"Output/{exp_name}/evaluate/{uid}_gt.ply", pcd_gt)
 
-        progress_bar.set_postfix({"chamfer_distance": np.mean(all_chamfer_distance)})
+        progress_bar.set_postfix({"chamfer_distance": np.mean(all_chamfer_distance),
+                                  "f_score": np.mean(all_f_score)})
         progress_bar.update(1)
         

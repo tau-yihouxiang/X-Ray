@@ -1,6 +1,4 @@
 import glob
-import time
-from diffusers import UNetSpatioTemporalConditionModel
 from diffusers.utils import load_image
 import torch
 from PIL import Image
@@ -12,7 +10,7 @@ import open3d as o3d
 import torch.nn.functional as F
 import shutil
 from tqdm import tqdm
-from src.chamfer_distance import compute_trimesh_chamfer
+from src.metrics import chamfer_distance_and_f_score
 from scipy.sparse import csr_matrix
 import argparse
 from diffusers import AutoencoderKL
@@ -116,6 +114,7 @@ if __name__ == "__main__":
     width = 256
 
     all_chamfer_distance = []
+    all_f_score = []
     for i in range(len(image_paths)):
         image_path = image_paths[i]
         uid = os.path.basename(image_path).replace(".png", "")
@@ -175,8 +174,12 @@ if __name__ == "__main__":
         gt_pcd.points = o3d.utility.Vector3dVector(gt_pts)
         o3d.io.write_point_cloud(f"Output/{exp_upsampler}/evaluate/{uid}_gt.ply", gt_pcd)
 
-        chamfer_distance = compute_trimesh_chamfer(gt_pts, gen_pts)
+        chamfer_distance, f_score = chamfer_distance_and_f_score(gt_pts, gen_pts, 0.1)
         all_chamfer_distance += [chamfer_distance]
-        progress_bar.set_postfix({"chamfer_distance": np.mean(all_chamfer_distance)})
+        all_f_score += [f_score]
+
+        progress_bar.set_postfix({"chamfer_distance": np.mean(all_chamfer_distance),
+                                  "f_score": np.mean(all_f_score)})
         progress_bar.update(1)
     print(f"{ckpt_name}: chamfer distance: {np.mean(all_chamfer_distance)}")
+    print(f"{ckpt_name}: F-score: {np.mean(all_f_score)}")
