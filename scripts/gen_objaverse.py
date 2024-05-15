@@ -235,8 +235,8 @@ def process_model(model_path):
 
 if __name__ == "__main__":
     root_dir = "/hdd/taohu/Data/Objaverse/Data/hf-objaverse-v1"
-    img_dir = "/hdd/taohu/Data/Objaverse/Data/Render/Objaverse_80K_normals/images"
-    depth_dir = "/hdd/taohu/Data/Objaverse/Data/Render/Objaverse_80K_normals/depths"
+    img_dir = "/hdd/taohu/Data/Objaverse/Data/Render/Objaverse_XRay/images"
+    depth_dir = "/hdd/taohu/Data/Objaverse/Data/Render/Objaverse_XRay/depths"
     image_height = 256
     image_width = 256
 
@@ -247,5 +247,5 @@ if __name__ == "__main__":
         for model_path in tqdm(model_paths):
             process_model(model_path)
     else:
-        with Pool(4) as p:
+        with Pool(6) as p:
             print(p.map(process_model, model_paths))

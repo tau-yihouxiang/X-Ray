@@ -4,7 +4,8 @@ import trimesh
 import argparse
 import os
 import glob
-from src.chamfer_distance import compute_trimesh_chamfer
+# from src.chamfer_distance import compute_trimesh_chamfer
+from src.metrics import chamfer_distance_and_f_score
 import tqdm
 
 def align_point_clouds(source, target):
@@ -38,7 +39,7 @@ def align_point_clouds(source, target):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("evaluate icp-cd")
-    parser.add_argument("--out_dir", type=str, default="Output/Objaverse_XRay_upsampler/evaluate", help="output directory")
+    parser.add_argument("--out_dir", type=str, default="/data/taohu/Program/TripoSR/output", help="output directory")
     args = parser.parse_args()
 
     # image files
@@ -47,6 +48,7 @@ if __name__ == "__main__":
     progress_bar = tqdm.tqdm(image_files)
 
     chamfer_distances = []
+    f_scores = []
     for image_file in progress_bar:
         try:
             # Load the source and target point clouds
@@ -64,6 +66,7 @@ if __name__ == "__main__":
             target = o3d.io.read_point_cloud(target_path)
 
             # Align the point clouds
+            # aligned_source = source
             aligned_source = align_point_clouds(source, target)
 
             # Save the aligned source point cloud
@@ -71,9 +74,15 @@ if __name__ == "__main__":
             o3d.io.write_point_cloud(aligned_source_path, aligned_source)
 
             # Compute the Chamfer distance
-            chamfer_distance = compute_trimesh_chamfer(np.array(target.points), np.array(aligned_source.points))
+            chamfer_distance, f_score = chamfer_distance_and_f_score(np.array(target.points), np.array(aligned_source.points), 0.1)
+            # if chamfer_distance is nan
+            if np.isnan(chamfer_distance) or np.isnan(f_score):
+                continue
+
             chamfer_distances.append(chamfer_distance)
-            progress_bar.set_postfix({"chamfer_distance": np.mean(chamfer_distances)})
+            f_scores.append(f_score)
+            progress_bar.set_postfix({"chamfer_distance": np.mean(chamfer_distances),
+                                      "f_score": np.mean(f_scores)})
             progress_bar.update(1)
         except Exception as e:
             print(f"Error: {e}")

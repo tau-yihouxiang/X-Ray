@@ -110,7 +110,7 @@ def load_depths( depths_path):
 	restored_array = loaded_sparse_matrix.toarray().reshape(original_shape)
 	return restored_array
 
-instance_data_root = "Data/ShapeNetV2_Car/depths"
+instance_data_root = "/hdd/taohu/Data/Objaverse/Data/Render/Objaverse_XRay"
 
 depths_paths = glob.glob(os.path.join(instance_data_root, "**/*.npz"), recursive=True)
 # shuffle
