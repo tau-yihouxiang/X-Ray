@@ -6,7 +6,6 @@
 <a href="https://huggingface.co/datasets/yihouxiang/X-Ray"><img src="https://img.shields.io/badge/🤗%20Dataset-Huggingface-orange"></a> 
 <a href="https://arxiv.org/abs/2404.14329"><img src="https://img.shields.io/badge/Paper_Arxiv-2404.14329-B31B1B.svg"></a>
 
-Checkpoints and Online Demo are comming soon!
 
 ## Introduction
 This repository contains the official implementation of the paper "X-Ray: A Sequential 3D Representation for Generation". We propose a novel 3D representation, X-Ray, that encodes the 3D structure of an object in a sequential manner. The X-Ray representation is a sequence of 2D images, each of which represents a cross-section of the object along a specific direction. We demonstrate that the X-Ray representation can be used to generate high-quality 3D shapes and poses. We show that our method can be used to generate 3D objects with both inside and outside shape and appearance.
@@ -58,6 +57,8 @@ $ python evaluate_diffusion.py --exp_diffusion Objaverse_XRay --date_root Data/O
 $ python evaluate_upsampler.py --exp_diffusion Objaverse_XRay --exp_upsampler Objaverse_XRay_upsampler
 ```
 
+Checkpoints and Online Demo are comming soon!
+
 ## Authors
 [Tao Hu](https://tau-yihouxiang.github.io) et al.
 
@@ -65,10 +66,12 @@ $ python evaluate_upsampler.py --exp_diffusion Objaverse_XRay --exp_upsampler Ob
 ## Citation
 If you find this work useful for your research, please cite our paper:
 ```
-@article{X-Ray,
-  title={X-Ray: A Sequential 3D Representation for Generation},
-  author={Tao Hu, Wenhang Ge, Yuyang Zhao, Gim Hee Lee},
-  journal={arXiv preprint arXiv: 2404.14329v1},
-  year={2024}
+@misc{hu2024xray,
+    title={X-Ray: A Sequential 3D Representation for Generation},
+    author={Tao Hu and Wenhang Ge and Yuyang Zhao and Gim Hee Lee},
+    year={2024},
+    eprint={2404.14329},
+    archivePrefix={arXiv},
+    primaryClass={cs.CV}
 }
 ```
