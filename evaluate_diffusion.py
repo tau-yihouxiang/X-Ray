@@ -92,8 +92,8 @@ if __name__ == "__main__":
     width = 64
 
     if "shapenet" in args.data_root.lower():
-        near = 0.5
-        far = 1.5
+        near = 0.6
+        far = 1.8
     else:
         near = 0.6
         far = 2.4
