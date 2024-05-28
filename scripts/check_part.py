@@ -111,18 +111,18 @@ def load_depths( depths_path):
 	return restored_array
 
 instance_data_root = "/hdd/taohu/Data/Objaverse/Data/Render/Objaverse_XRay"
+obj_paths = glob.glob(os.path.join("/hdd/taohu/Data/Objaverse/Data/hf-objaverse-v1/glbs", "**/*.glb"), recursive=True)
 
 depths_paths = glob.glob(os.path.join(instance_data_root, "**/*.npz"), recursive=True)
 # shuffle
-random.shuffle(depths_paths)
+sorted(depths_paths)
 
 near = 0.6
 far = 2.4
 
-for depth_path in depths_paths:
-    # depth_path = "Data/Objaverse_XRay/depths/690b5725419e4b05938f9a00ce818e78/001.npz"
+for depth_path in depths_paths[::10]:
     print(depth_path)
-    depths = load_depths(depth_path)
+    depths = load_depths(depth_path)[:8]
     GenDepths = depths[:, 0:1]
     GenNormals = depths[:, 1:4]
     GenNormals = GenNormals / (np.linalg.norm(GenNormals, axis=1, keepdims=True) + 1e-8)
@@ -137,6 +137,9 @@ for depth_path in depths_paths:
     C = GenColors.copy()
     C[nohit.repeat(3, 1)] = 0.5
 
+    # if nohit[-1].astype(np.float32).sum() > 256 * 256 * 0.9:
+    #     continue
+
     os.makedirs("logs", exist_ok=True)
     os.makedirs("logs/parts", exist_ok=True)
     torchvision.utils.save_image(torch.tensor((D - near) / (far - near)), "logs/depths.png", nrow=16, padding=0)
@@ -149,11 +152,31 @@ for depth_path in depths_paths:
     image.save("logs/image.png")
 
     gen_pts, gen_normals, gen_colors = depth_to_pcd_normals(GenDepths, GenNormals, GenColors)
+    # random gaussian noise
+    gen_pts += np.random.randn(*gen_pts.shape) * 0.003
+    gen_colors += np.random.randn(*gen_colors.shape) * 0.003
+    gen_colors = np.clip(gen_colors, 0, 1)
+
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(gen_pts)
     pcd.normals = o3d.utility.Vector3dVector(gen_normals)
     pcd.colors = o3d.utility.Vector3dVector(gen_colors)
-    o3d.io.write_point_cloud("logs/gt.ply", pcd)
+    o3d.io.write_point_cloud("logs/recon.ply", pcd)
+
+    # extract filename from depth_path
+    filename = depth_path.split("/")[-2]
+    obj_path = None
+    for obj_path in obj_paths:
+        if filename in obj_path:
+            break
+    # shutil.copy(obj_path, "logs/gt.glb")
+    # load .glb file and export as .ply
+    mesh = trimesh.load(obj_path,  force='mesh', process=False)
+    mesh.visual = mesh.visual.to_color()
+    mesh.export("logs/gt.ply")
+
+    # load ground truth .glb file
+    glb_path = depth_path.replace("depths", "meshes").replace(".npz", ".glb")
 
     shutil.rmtree("logs/parts")
     os.makedirs("logs/parts", exist_ok=True)
@@ -177,7 +200,7 @@ for depth_path in depths_paths:
         else:
             idx = np.arange(len(gen_pts))
         for j in idx:
-            arrow_trimesh += [create_arrow([0, 0, -0.5], gen_pts[j])]
+            arrow_trimesh += [create_arrow([0, 0, 0], gen_pts[j])]
         arrow_trimesh = trimesh.util.concatenate(arrow_trimesh)
         # export the arrow to a ply file
         arrow_trimesh.export(f"logs/parts/{i:02d}_arrow.ply")

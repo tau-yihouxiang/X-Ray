@@ -79,8 +79,8 @@ def load_depths(depths_path):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("SVD Depth Inference")
-    parser.add_argument("--exp_diffusion", type=str, default="Objaverse_XRay", help="experiment name")
-    parser.add_argument("--data_root", type=str, default="Data/Objaverse_XRay", help="data root")
+    parser.add_argument("--exp_diffusion", type=str, default="ShapeNetV2_Car", help="experiment name")
+    parser.add_argument("--data_root", type=str, default="Data/ShapeNetV2_Car", help="data root")
     parser.add_argument("--model_id", type=str, default="stabilityai/stable-video-diffusion-img2vid")
 
     args = parser.parse_args()
@@ -136,7 +136,7 @@ if __name__ == "__main__":
             mask = image.split()[-1]
             mask = (np.array(mask) > 0).astype(np.float32)
             if (mask.sum() / (mask.shape[0] * mask.shape[1])) < 0.05: # filter invalid image
-                import pdb; pdb.set_trace()
+                continue
             image_rgb = image.convert("RGB")
             outputs = pipe(image_rgb,
                             height=height,
@@ -149,6 +149,12 @@ if __name__ == "__main__":
                             output_type="latent").frames[0]
             outputs = outputs.clamp(-1, 1) # clamp to [-1, 1]
         
+        # # save outputs to .png
+        # visuals = outputs[:, 4:7] * 0.5 + 0.5
+        # hits = outputs[:, -1:].expand(-1, 3, -1, -1) * 0.5 + 0.5
+        # visuals[hits < 0.5] = 1
+        # torchvision.utils.save_image(visuals, f"Output/{exp_name}/evaluate/{uid}.png", nrow=8, padding=0)
+
         # save outputs to .pt
         torch.save(outputs.detach().cpu(), f"Output/{exp_name}/evaluate/{uid}.pt")
 
