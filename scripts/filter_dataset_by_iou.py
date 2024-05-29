@@ -26,33 +26,41 @@ count = 0
 count_iou = 0
 progress_bar = tqdm.tqdm(xrays_paths)
 for xray_path in progress_bar:
-    count += 1
-    xrays = load_xrays(xray_path)
-    image_values_pil = Image.open(xray_path.replace("xrays", "images").replace(".npz", ".png"))
-    _, _, _, mask = image_values_pil.split()
-
-    xray = (xrays[0, 0] > 0).astype(np.float32)
-    mask = (np.array(mask.resize(xray.shape)) / 255 > 0.5).astype(np.float32)
-
-    delta = np.abs(xray - mask)
-
-    iou = (mask * xray).sum() / np.maximum(mask, xray).sum()
-    if iou >= 0.9:
-        # copy xray and mask to dst_root
-        dst_xray_path = xray_path.replace(src_root, dst_root)
-        dst_xray_dir = os.path.dirname(dst_xray_path)
-        os.makedirs(dst_xray_dir, exist_ok=True)
-        # shutil
-        shutil.copy(xray_path, dst_xray_path)
-
-        # copy image to dst_root
-        image_path = xray_path.replace("xrays", "images").replace(".npz", ".png")
+    try:
         dst_image_path = xray_path.replace(src_root, dst_root).replace("xrays", "images").replace(".npz", ".png")
-        dst_image_dir = os.path.dirname(dst_image_path)
-        os.makedirs(dst_image_dir, exist_ok=True)
-        shutil.copy(image_path, dst_image_path)
+        if os.path.exists(dst_image_path):
+            progress_bar.set_description(f"Skip {xray_path}")
+            continue
 
-        count_iou += 1
-        rate = count_iou / count
-        progress_bar.set_description(f"IOU: {iou:.4f}, rate: {rate:.4f}")
+        count += 1
+        xrays = load_xrays(xray_path)
+        image_values_pil = Image.open(xray_path.replace("xrays", "images").replace(".npz", ".png"))
+        _, _, _, mask = image_values_pil.split()
+
+        xray = (xrays[0, 0] > 0).astype(np.float32)
+        mask = (np.array(mask.resize(xray.shape)) / 255 > 0.5).astype(np.float32)
+
+        delta = np.abs(xray - mask)
+
+        iou = (mask * xray).sum() / np.maximum(mask, xray).sum()
+        if iou >= 0.9:
+            # copy xray and mask to dst_root
+            dst_xray_path = xray_path.replace(src_root, dst_root)
+            dst_xray_dir = os.path.dirname(dst_xray_path)
+            os.makedirs(dst_xray_dir, exist_ok=True)
+            # shutil
+            shutil.copy(xray_path, dst_xray_path)
+
+            # copy image to dst_root
+            image_path = xray_path.replace("xrays", "images").replace(".npz", ".png")
+            dst_image_dir = os.path.dirname(dst_image_path)
+            os.makedirs(dst_image_dir, exist_ok=True)
+            shutil.copy(image_path, dst_image_path)
+
+            count_iou += 1
+            rate = count_iou / count
+            progress_bar.set_description(f"IOU: {iou:.4f}, rate: {rate:.4f}")
+    except Exception as e:
+        print(e)
+        continue
         

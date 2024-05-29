@@ -1,7 +1,7 @@
 import glob
 from diffusers import UNetSpatioTemporalConditionModel
 from src.dataset import DiffusionDataset
-from src.xray_pipeline import StableVideoDiffusionPipeline
+from src.xray_pipeline import XRayDiffusionPipeline
 from diffusers.utils import load_image
 import torch
 from PIL import Image
@@ -103,7 +103,7 @@ if __name__ == "__main__":
     else:
         val_dataset = DiffusionDataset(xray_root, height, num_frames=8, near=near, far=far, phase="val")
 
-    pipe = StableVideoDiffusionPipeline.from_pretrained(model_id, 
+    pipe = XRayDiffusionPipeline.from_pretrained(model_id, 
                                 torch_dtype=torch.float16, variant="fp16").to("cuda")
 
     # Get the most recent checkpoint

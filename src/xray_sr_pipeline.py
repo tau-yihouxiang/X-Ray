@@ -62,7 +62,7 @@ def tensor2vid(video: torch.Tensor, processor, output_type="np"):
 
 
 @dataclass
-class StableVideoDiffusionPipelineOutput(BaseOutput):
+class XRayDiffusionPipelineOutput(BaseOutput):
     r"""
     Output class for zero-shot text-to-video pipeline.
 
@@ -75,7 +75,7 @@ class StableVideoDiffusionPipelineOutput(BaseOutput):
     frames: Union[List[PIL.Image.Image], np.ndarray]
 
 
-class StableVideoDiffusionPipeline(DiffusionPipeline):
+class XRayDiffusionPipeline(DiffusionPipeline):
     r"""
     Pipeline to generate video from an input image using Stable Video Diffusion.
 
@@ -384,17 +384,17 @@ class StableVideoDiffusionPipeline(DiffusionPipeline):
                 plain tuple.
 
         Returns:
-            [`~pipelines.stable_diffusion.StableVideoDiffusionPipelineOutput`] or `tuple`:
-                If `return_dict` is `True`, [`~pipelines.stable_diffusion.StableVideoDiffusionPipelineOutput`] is returned,
+            [`~pipelines.stable_diffusion.XRayDiffusionPipelineOutput`] or `tuple`:
+                If `return_dict` is `True`, [`~pipelines.stable_diffusion.XRayDiffusionPipelineOutput`] is returned,
                 otherwise a `tuple` is returned where the first element is a list of list with the generated frames.
 
         Examples:
 
         ```py
-        from diffusers import StableVideoDiffusionPipeline
+        from diffusers import XRayDiffusionPipeline
         from diffusers.utils import load_image, export_to_video
 
-        pipe = StableVideoDiffusionPipeline.from_pretrained("stabilityai/stable-video-diffusion-img2vid-xt", torch_dtype=torch.float16, variant="fp16")
+        pipe = XRayDiffusionPipeline.from_pretrained("stabilityai/stable-video-diffusion-img2vid-xt", torch_dtype=torch.float16, variant="fp16")
         pipe.to("cuda")
 
         image = load_image("https://lh3.googleusercontent.com/y-iFOHfLTwkuQSUegpwDdgKmOjRSTvPxat63dQLB25xkTs4lhIbRUFeNBWZzYf370g=s1200")
@@ -548,7 +548,7 @@ class StableVideoDiffusionPipeline(DiffusionPipeline):
         if not return_dict:
             return frames
 
-        return StableVideoDiffusionPipelineOutput(frames=frames)
+        return XRayDiffusionPipelineOutput(frames=frames)
 
 
 # resizing utils

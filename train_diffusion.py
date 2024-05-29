@@ -43,7 +43,7 @@ from transformers import CLIPImageProcessor, CLIPVisionModelWithProjection
 from einops import rearrange
 
 import diffusers
-from src.xray_pipeline import StableVideoDiffusionPipeline
+from src.xray_pipeline import XRayDiffusionPipeline
 from diffusers import AutoencoderKLTemporalDecoder, EulerDiscreteScheduler, UNetSpatioTemporalConditionModel
 from diffusers.image_processor import VaeImageProcessor
 from diffusers.optimization import get_scheduler
@@ -903,6 +903,12 @@ def main():
                 noise = torch.randn_like(latents)
                 bsz = latents.shape[0]
 
+                cond_sigmas = rand_log_normal(shape=[bsz,], loc=-3.0, scale=0.5).to(latents)
+                noise_aug_strength = cond_sigmas[0] # TODO: support batch > 1
+                cond_sigmas = cond_sigmas[:, None, None, None]
+                conditional_pixel_values = \
+                    torch.randn_like(conditional_pixel_values) * cond_sigmas + conditional_pixel_values
+                
                 conditional_latents = F.interpolate(conditional_pixel_values, (512, 512), mode="bilinear")
                 conditional_latents = vae.encode(conditional_latents).latent_dist.mode()
                 conditional_latents = F.interpolate(conditional_latents, (args.height, args.width), mode="bilinear")
@@ -929,7 +935,7 @@ def main():
                 added_time_ids = _get_add_time_ids(
                     7,
                     127, # motion_bucket_id = 127
-                    0.0, # noise_aug_strength == 0.0
+                    noise_aug_strength, # noise_aug_strength == 0.0
                     encoder_hidden_states.dtype,
                     bsz,
                 )
@@ -1054,7 +1060,7 @@ def main():
                             ema_unet.store(unet.parameters())
                             ema_unet.copy_to(unet.parameters())
                         # The models need unwrapping because for compatibility in distributed training mode.
-                        pipeline = StableVideoDiffusionPipeline.from_pretrained(
+                        pipeline = XRayDiffusionPipeline.from_pretrained(
                             args.pretrained_model_name_or_path,
                             unet=accelerator.unwrap_model(unet),
                             image_encoder=accelerator.unwrap_model(
@@ -1134,7 +1140,7 @@ def main():
         if args.use_ema:
             ema_unet.copy_to(unet.parameters())
 
-        pipeline = StableVideoDiffusionPipeline.from_pretrained(
+        pipeline = XRayDiffusionPipeline.from_pretrained(
             args.pretrained_model_name_or_path,
             image_encoder=accelerator.unwrap_model(image_encoder),
             vae=accelerator.unwrap_model(vae),
