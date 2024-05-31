@@ -1,5 +1,5 @@
 <p align="center">
-    <img src="docs/Logo.png" width="200" height=auto alt="Logo">
+    <img src="docs/Logo.png" width="400" height=auto alt="Logo">
 </p>
 
 # X-Ray: A Sequential 3D Representation for Generation.
