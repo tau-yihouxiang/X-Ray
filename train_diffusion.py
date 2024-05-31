@@ -76,7 +76,7 @@ def get_rays(directions, c2w):
     return rays_o, rays_d
 
 
-def depth_to_pcd_normals(GenDepths, GenNormals, GenColors):
+def xray_to_pcd(GenDepths, GenNormals, GenColors):
     camera_angle_x = 0.8575560450553894
     image_width = GenDepths.shape[-1]
     image_height = GenDepths.shape[-2]
@@ -896,7 +896,7 @@ def main():
                 # save xray and conditional_pixel_values as images.
                 if global_step % 50 == 0 and accelerator.is_main_process:
                     os.makedirs(os.path.join(args.output_dir, "samples"), exist_ok=True)
-                    torchvision.utils.save_image(xray[0, :, 0:1], os.path.join(args.output_dir, "samples", "xrays.png"), normalize=True, nrow=4)
+                    torchvision.utils.save_image(xray[0, :, 0:1], os.path.join(args.output_dir, "samples", "depths.png"), normalize=True, nrow=4)
                     torchvision.utils.save_image(xray[0, :, 1:4], os.path.join(args.output_dir, "samples", "normals.png"), normalize=True, nrow=4)
                     torchvision.utils.save_image(xray[0, :, 4:7], os.path.join(args.output_dir, "samples", "colors.png"), normalize=True, nrow=4)
                     torchvision.utils.save_image(conditional_pixel_values[0:1], os.path.join(args.output_dir, "samples", "images.png"), normalize=True)
@@ -1090,10 +1090,10 @@ def main():
                         with torch.autocast(
                             str(accelerator.device).replace(":0", ""), enabled=accelerator.mixed_precision == "fp16"
                         ):
-                            # val_image_paths = val_dataset.depth_paths[:args.num_validation_images]
+                            # val_image_paths = val_dataset.xray_paths[:args.num_validation_images]
                             for val_img_idx in range(args.num_validation_images):
                                 num_frames = args.num_frames
-                                image_path = val_dataset.depth_paths[val_img_idx].replace("xrays", "images").replace(".npz", ".png")
+                                image_path = val_dataset.xray_paths[val_img_idx].replace("xrays", "images").replace(".npz", ".png")
                                 image_val = load_image(image_path).convert("RGB").resize((args.width * 8, args.height * 8))
                                 image_val.save(f"{val_save_dir}/step_{global_step}_val_img_{val_img_idx}_original.png")
                                 outputs = pipeline(
@@ -1120,7 +1120,7 @@ def main():
                                 GenDepths[GenDepths >= args.far] = 0
                                 GenNormals = F.normalize(outputs[:, 1:4], dim=1).cpu().numpy()
                                 GenColors = outputs[:, 4:7].cpu().numpy() * 0.5 + 0.5
-                                gen_pts, gen_normals, gen_colors = depth_to_pcd_normals(GenDepths, GenNormals, GenColors)
+                                gen_pts, gen_normals, gen_colors = xray_to_pcd(GenDepths, GenNormals, GenColors)
                                 pcd = o3d.geometry.PointCloud()
                                 pcd.points = o3d.utility.Vector3dVector(gen_pts)
                                 pcd.normals = o3d.utility.Vector3dVector(gen_normals)

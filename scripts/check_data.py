@@ -25,7 +25,7 @@ def get_rays(directions, c2w):
     return rays_o, rays_d
  
 
-def depth_to_pcd_normals(GenDepths, GenNormals, GenColors):
+def xray_to_pcd(GenDepths, GenNormals, GenColors):
     camera_angle_x = 0.8575560450553894
     image_width = GenDepths.shape[-1]
     image_height = GenDepths.shape[-2]
@@ -63,8 +63,8 @@ def depth_to_pcd_normals(GenDepths, GenNormals, GenColors):
     return xyz, normals, colors
 
 
-def load_depths( depths_path):
-	loaded_data = np.load(depths_path)
+def load_xray( xray_path):
+	loaded_data = np.load(xray_path)
 
 	loaded_sparse_matrix = csr_matrix((loaded_data['data'], loaded_data['indices'], loaded_data['indptr']), shape=loaded_data['shape'])
 
@@ -75,19 +75,19 @@ def load_depths( depths_path):
 instance_data_root = "Data/Objaverse_XRay/xrays/a57dd10038a14ef8a141e0e7c3bc3e27"
 # mesh_dir = "/data/taohu/Data/ShapeNet/ShapeNetCore.v2/02958343"
 
-depths_paths = glob.glob(os.path.join(instance_data_root, "**/*.npz"), recursive=True)
+xray_paths = glob.glob(os.path.join(instance_data_root, "**/*.npz"), recursive=True)
 # shuffle
-random.shuffle(depths_paths)
+random.shuffle(xray_paths)
 
 near = 0.6
 far = 1.8
 
-for depth_path in depths_paths:
-    print(depth_path)
+for xray_path in xray_paths:
+    print(xray_path)
 
-    # depth_path = "Data/Objaverse_XRay/xrays/a57dd10038a14ef8a141e0e7c3bc3e27/000.npz"
+    # xray_path = "Data/Objaverse_XRay/xrays/a57dd10038a14ef8a141e0e7c3bc3e27/000.npz"
 
-    xrays = load_depths(depth_path)
+    xrays = load_xray(xray_path)
     xrays = torch.from_numpy(xrays).float()
     GenDepths = xrays[:, 0:1].expand(-1, 3, -1, -1)
     GenDepths = ((GenDepths - near) / (far - near)).clip(min=0, max=1)
@@ -110,7 +110,7 @@ for depth_path in depths_paths:
     torchvision.utils.save_image(XRay, "logs/xray.png", nrow=16, padding=0)
 
     # save image
-    image_path = depth_path.replace("xrays", "images").replace("npz", "png")
+    image_path = xray_path.replace("xrays", "images").replace("npz", "png")
     image = Image.open(image_path)
     # convert to rgba image to white color image using PIL
     white_image = Image.new("RGB", image.size, "WHITE")
@@ -118,7 +118,7 @@ for depth_path in depths_paths:
     white_image.save("logs/image.png")
 
     # # copy mesh file to logs
-    # mesh_path = os.path.join(mesh_dir, depth_path.split("/")[-2], "models")
+    # mesh_path = os.path.join(mesh_dir, xray_path.split("/")[-2], "models")
     # # copy mesh path to logs
     # shutil.copytree(mesh_path, "logs/mesh")
     import pdb; pdb.set_trace()

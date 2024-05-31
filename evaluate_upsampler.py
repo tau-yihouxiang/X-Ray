@@ -28,7 +28,7 @@ def get_rays(directions, c2w):
 
     return rays_o, rays_d
 
-def depth_to_pcd_normals(GenDepths, GenNormals, GenColors):
+def xray_to_pcd(GenDepths, GenNormals, GenColors):
     camera_angle_x = 0.8575560450553894
     image_width = GenDepths.shape[-1]
     image_height = GenDepths.shape[-2]
@@ -66,8 +66,8 @@ def depth_to_pcd_normals(GenDepths, GenNormals, GenColors):
     return xyz, normals, colors
 
 
-def load_depths(depths_path):
-    loaded_data = np.load(depths_path)
+def load_xray(xray_path):
+    loaded_data = np.load(xray_path)
     loaded_sparse_matrix = csr_matrix((loaded_data['data'], loaded_data['indices'], loaded_data['indptr']), shape=loaded_data['shape'])
     original_shape = (16, 1+3+3, 256, 256)
     restored_array = loaded_sparse_matrix.toarray().reshape(original_shape)
@@ -120,8 +120,8 @@ if __name__ == "__main__":
         uid = os.path.basename(image_path).replace(".png", "")
 
         with torch.no_grad():
-            depth_path = image_path.replace(".png", ".pt")
-            xrays = torch.load(depth_path)
+            xray_path = image_path.replace(".png", ".pt")
+            xrays = torch.load(xray_path)
             xray_lr = xrays.clone().cuda()[None] # [8, 8, H, W]
 
             image = load_image(image_path).resize((width * 2, height * 2), Image.BILINEAR).convert("RGB")
@@ -154,7 +154,7 @@ if __name__ == "__main__":
         GenNormals = GenNormals.cpu().numpy()
         GenColors = GenColors.cpu().numpy()
 
-        gen_pts, gen_normals, gen_colors = depth_to_pcd_normals(GenDepths, GenNormals, GenColors)
+        gen_pts, gen_normals, gen_colors = xray_to_pcd(GenDepths, GenNormals, GenColors)
         gen_pts = gen_pts - np.mean(gen_pts, axis=0)
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(gen_pts)

@@ -3,7 +3,7 @@
 export MODEL_NAME="stabilityai/stable-video-diffusion-img2vid"
 export OUTPUT_DIR="Output/Objaverse_XRay"
 export INSTANCE_DIR="Data/Objaverse_XRay"
-export NUM_GPUS=0,1,2
+export NUM_GPUS=1
 
 CUDA_VISIBLE_DEVICES=3 accelerate launch \
     --main_process_port=29501 --num_processes=${NUM_GPUS} train_diffusion.py \

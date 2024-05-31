@@ -30,7 +30,7 @@ def get_rays(directions, c2w):
 
     return rays_o, rays_d
 
-def depth_to_pcd_normals(GenDepths, GenNormals, GenColors):
+def xray_to_pcd(GenDepths, GenNormals, GenColors):
     camera_angle_x = 0.8575560450553894
     image_width = GenDepths.shape[-1]
     image_height = GenDepths.shape[-2]
@@ -69,8 +69,8 @@ def depth_to_pcd_normals(GenDepths, GenNormals, GenColors):
     return xyz, normals, colors
 
 
-def load_depths(depths_path):
-    loaded_data = np.load(depths_path)
+def load_xray(xray_path):
+    loaded_data = np.load(xray_path)
     loaded_sparse_matrix = csr_matrix((loaded_data['data'], loaded_data['indices'], loaded_data['indptr']), shape=loaded_data['shape'])
     original_shape = (16, 1+3+3, 256, 256)
     restored_array = loaded_sparse_matrix.toarray().reshape(original_shape)
@@ -168,7 +168,7 @@ if __name__ == "__main__":
         GenNormals = F.normalize(outputs[:, 1:4], dim=1).cpu().numpy()
         GenColors = (outputs[:, 4:7].cpu().numpy() * 0.5 + 0.5)
 
-        gen_pts, gen_normals, gen_colors = depth_to_pcd_normals(GenDepths, GenNormals, GenColors)
+        gen_pts, gen_normals, gen_colors = xray_to_pcd(GenDepths, GenNormals, GenColors)
         gen_pts = gen_pts - np.mean(gen_pts, axis=0)
         pcd_gen = o3d.geometry.PointCloud()
         pcd_gen.points = o3d.utility.Vector3dVector(gen_pts)
@@ -176,11 +176,11 @@ if __name__ == "__main__":
         pcd_gen.colors = o3d.utility.Vector3dVector(gen_colors[..., :3])
         
         gt_path = image_path.replace("images", "xrays").replace(".png", ".npz")
-        xray = load_depths(gt_path)[:8]
+        xray = load_xray(gt_path)[:8]
         GtDepths = xray[:, 0:1]
         GtNormals = xray[:, 1:4]
         GtColors = xray[:, 4:7]
-        gt_pts, gt_normals, gt_colors = depth_to_pcd_normals(GtDepths, GtNormals, GtColors)
+        gt_pts, gt_normals, gt_colors = xray_to_pcd(GtDepths, GtNormals, GtColors)
         gt_pts = gt_pts - np.mean(gt_pts, axis=0)
         pcd_gt = o3d.geometry.PointCloud()
         pcd_gt.points = o3d.utility.Vector3dVector(gt_pts)
@@ -197,8 +197,9 @@ if __name__ == "__main__":
         o3d.io.write_point_cloud(f"Output/{exp_name}/evaluate/{uid}_prd.ply", pcd_gen)
         o3d.io.write_point_cloud(f"Output/{exp_name}/evaluate/{uid}_gt.ply", pcd_gt)
 
-        progress_bar.set_postfix({"CD": chamfer_distance,
-                                  "mean CD": np.mean(all_chamfer_distance),
+        progress_bar.set_postfix({
+                                  # "CD": chamfer_distance,
+                                  "CD": np.mean(all_chamfer_distance),
                                   "FS@0.01": np.mean(all_f_score)})
         progress_bar.update(1)
         

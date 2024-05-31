@@ -66,7 +66,7 @@ def get_rays(directions, c2w):
 
     return rays_o, rays_d
 
-def depth_to_pcd_normals(GenDepths, GenNormals, GenColors):
+def xray_to_pcd(GenDepths, GenNormals, GenColors):
     camera_angle_x = 0.8575560450553894
     image_width = GenDepths.shape[-1]
     image_height = GenDepths.shape[-2]
@@ -776,7 +776,7 @@ def main():
                             os.makedirs(val_save_dir)
 
                         with torch.no_grad():
-                            val_image_paths = val_dataset.depth_paths[:args.num_validation_images]
+                            val_image_paths = val_dataset.xray_paths[:args.num_validation_images]
                             for val_img_idx in range(args.num_validation_images):
                                 xray_lr = val_dataset[val_img_idx]["xray_lr"].to(accelerator.device, dtype=weight_dtype)[None]
                                 xray_lr = xray_lr + torch.randn_like(xray_lr) * random.uniform(0, 1) * 0.1
@@ -794,7 +794,7 @@ def main():
                                 GenDepths = GenDepths.cpu().numpy()
                                 GenNormals = GenNormals.cpu().numpy()
                                 GenColors = GenColors.cpu().numpy()
-                                gen_pts, gen_normals, gen_colors = depth_to_pcd_normals(GenDepths, GenNormals, GenColors)
+                                gen_pts, gen_normals, gen_colors = xray_to_pcd(GenDepths, GenNormals, GenColors)
                                 pcd = o3d.geometry.PointCloud()
                                 pcd.points = o3d.utility.Vector3dVector(gen_pts)
                                 pcd.normals = o3d.utility.Vector3dVector(gen_normals)
@@ -836,7 +836,7 @@ def main():
                                 GenDepths = GenDepths.cpu().numpy()
                                 GenNormals = GenNormals.cpu().numpy()
                                 GenColors = GenColors.cpu().numpy()
-                                gen_pts, gen_normals, gen_colors = depth_to_pcd_normals(GenDepths, GenNormals, GenColors)
+                                gen_pts, gen_normals, gen_colors = xray_to_pcd(GenDepths, GenNormals, GenColors)
                                 pcd = o3d.geometry.PointCloud()
                                 pcd.points = o3d.utility.Vector3dVector(gen_pts)
                                 pcd.normals = o3d.utility.Vector3dVector(gen_normals)

@@ -16,9 +16,9 @@ import torch
 import torch.nn.functional as F
 import open3d as o3d
 
-def load_depths(depths_path):
+def load_xray(xray_path):
     # 加载稀疏矩阵数据
-    loaded_data = np.load(depths_path)
+    loaded_data = np.load(xray_path)
 
     # 从加载的数据中获取稀疏矩阵的组成部分
     loaded_sparse_matrix = csr_matrix((loaded_data['data'], loaded_data['indices'], loaded_data['indptr']), shape=loaded_data['shape'])
@@ -139,7 +139,7 @@ def process_model(model_path):
         meta = load_from_json(json_path)
         meta["frames"] = meta["frames"]
         
-        if os.path.exists(os.path.join(depth_dir, uid, meta["frames"][-1]["file_path"][:-4] + ".npz")):
+        if os.path.exists(os.path.join(xray_dir, uid, meta["frames"][-1]["file_path"][:-4] + ".npz")):
             print("existed")
             return
         
@@ -213,10 +213,10 @@ def process_model(model_path):
                         GenDepths[i, 4:7, u, v] = ray_colors[ray_index][i]
 
             # save GenDepths as a npy file
-            os.makedirs(os.path.join(depth_dir, uid), exist_ok=True)
+            os.makedirs(os.path.join(xray_dir, uid), exist_ok=True)
             sparse_matrix = csr_matrix(GenDepths.reshape(16, -1))
             
-            np.savez_compressed(os.path.join(depth_dir, uid, frame["file_path"][:-4]), 
+            np.savez_compressed(os.path.join(xray_dir, uid, frame["file_path"][:-4]), 
                                 data=sparse_matrix.data, 
                                 indices=sparse_matrix.indices, 
                                 indptr=sparse_matrix.indptr, 
@@ -226,7 +226,7 @@ def process_model(model_path):
             # pcd.points = o3d.utility.Vector3dVector(points)
             # pcd.normals = o3d.utility.Vector3dVector(normals)
             # pcd.colors = o3d.utility.Vector3dVector(colors[:, :3]/ 255.0)
-            # o3d.io.write_point_cloud(os.path.join(depth_dir, uid, frame["file_path"][:-4] + ".ply"), pcd)
+            # o3d.io.write_point_cloud(os.path.join(xray_dir, uid, frame["file_path"][:-4] + ".ply"), pcd)
 
         print("saved")
     except Exception as e:
@@ -236,7 +236,7 @@ def process_model(model_path):
 if __name__ == "__main__":
     root_dir = "/hdd/taohu/Data/Objaverse/Data/hf-objaverse-v1"
     img_dir = "/hdd/taohu/Data/Objaverse/Data/Render/Objaverse_XRay/images"
-    depth_dir = "/hdd/taohu/Data/Objaverse/Data/Render/Objaverse_XRay/xrays"
+    xray_dir = "/hdd/taohu/Data/Objaverse/Data/Render/Objaverse_XRay/xrays"
     image_height = 256
     image_width = 256
 

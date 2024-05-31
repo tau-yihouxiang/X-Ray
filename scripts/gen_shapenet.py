@@ -18,9 +18,9 @@ import torch
 import torch.nn.functional as F
 import open3d as o3d
 
-def load_depths(depths_path):
+def load_xray(xray_path):
     # 加载稀疏矩阵数据
-    loaded_data = np.load(depths_path)
+    loaded_data = np.load(xray_path)
 
     # 从加载的数据中获取稀疏矩阵的组成部分
     loaded_sparse_matrix = csr_matrix((loaded_data['data'], loaded_data['indices'], loaded_data['indptr']), shape=loaded_data['shape'])
@@ -141,7 +141,7 @@ def process_model(model_path):
         meta = load_from_json(json_path)
         meta["frames"] = meta["frames"]
         
-        if os.path.exists(os.path.join(depth_dir, obj_id, meta["frames"][-1]["file_path"][:-4] + ".npz")):
+        if os.path.exists(os.path.join(xray_dir, obj_id, meta["frames"][-1]["file_path"][:-4] + ".npz")):
             print("existed")
             return
         
@@ -174,7 +174,7 @@ def process_model(model_path):
         raycast = RaycastingImaging()
         
         for frame in (meta["frames"]):
-            os.makedirs(os.path.join(depth_dir, obj_id), exist_ok=True)
+            os.makedirs(os.path.join(xray_dir, obj_id), exist_ok=True)
             # save image
             c2w = np.array(frame["c2w"])
 
@@ -182,9 +182,9 @@ def process_model(model_path):
             mesh_frame = mesh.copy().apply_transform(Rt)
 
             # # export mesh as ply using trimesh
-            # mesh_frame.export(os.path.join(depth_dir, obj_id, frame["file_path"][:-4] + ".ply"))
+            # mesh_frame.export(os.path.join(xray_dir, obj_id, frame["file_path"][:-4] + ".ply"))
             # # copy image
-            # shutil.copy(os.path.join(img_dir, obj_id, frame["file_path"]), os.path.join(depth_dir, obj_id))
+            # shutil.copy(os.path.join(img_dir, obj_id, frame["file_path"]), os.path.join(xray_dir, obj_id))
             # import pdb; pdb.set_trace()
             # break
 
@@ -234,7 +234,7 @@ def process_model(model_path):
             # save GenDepths as a npy file
             sparse_matrix = csr_matrix(GenDepths.reshape(16, -1))
             
-            np.savez_compressed(os.path.join(depth_dir, obj_id, frame["file_path"][:-4]), 
+            np.savez_compressed(os.path.join(xray_dir, obj_id, frame["file_path"][:-4]), 
                                 data=sparse_matrix.data, 
                                 indices=sparse_matrix.indices, 
                                 indptr=sparse_matrix.indptr, 
@@ -244,7 +244,7 @@ def process_model(model_path):
             # pcd.points = o3d.utility.Vector3dVector(points)
             # pcd.normals = o3d.utility.Vector3dVector(normals)
             # pcd.colors = o3d.utility.Vector3dVector(colors[:, :3])
-            # o3d.io.write_point_cloud(os.path.join(depth_dir, obj_id, frame["file_path"][:-4] + ".ply"), pcd)
+            # o3d.io.write_point_cloud(os.path.join(xray_dir, obj_id, frame["file_path"][:-4] + ".ply"), pcd)
 
         print("saved")
     except Exception as e:
@@ -255,7 +255,7 @@ def process_model(model_path):
 if __name__ == "__main__":
     root_dir = "/data/taohu/Data/ShapeNet/ShapeNetCore.v2_Clean"
     img_dir = "/data/taohu/Data/ShapeNet/ShapeNetV2_Car/images"
-    depth_dir = "/data/taohu/Data/ShapeNet/ShapeNetV2_Car/xrays"
+    xray_dir = "/data/taohu/Data/ShapeNet/ShapeNetV2_Car/xrays"
     image_height = 256
     image_width = 256
 

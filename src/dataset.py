@@ -23,16 +23,16 @@ class DiffusionDataset(Dataset):
         self.near = near
         self.far = far
         self.num_frames = num_frames
-        self.depth_paths = glob.glob(os.path.join(root_dir, "xrays/**/*.npz"), recursive=True)
-        sorted(self.depth_paths)
+        self.xray_paths = glob.glob(os.path.join(root_dir, "xrays/**/*.npz"), recursive=True)
+        sorted(self.xray_paths)
         if phase == "train":
-            del self.depth_paths[::10]
-            random.shuffle(self.depth_paths)
+            del self.xray_paths[::10]
+            random.shuffle(self.xray_paths)
         elif phase == "val":
-            self.depth_paths = self.depth_paths[::20]
+            self.xray_paths = self.xray_paths[::20]
         else:
-            self.depth_paths = self.depth_paths
-        self.num_samples = len(self.depth_paths)        
+            self.xray_paths = self.xray_paths
+        self.num_samples = len(self.xray_paths)        
 
     def __len__(self):
         return self.num_samples
@@ -56,9 +56,9 @@ class DiffusionDataset(Dataset):
         """
         try:
             sample = {}
-            xray_path = self.depth_paths[idx]
-            depth_path = xray_path
-            xrays = self.load_xrays(depth_path)
+            xray_path = self.xray_paths[idx]
+            xray_path = xray_path
+            xrays = self.load_xrays(xray_path)
 
             xray = torch.from_numpy(xrays.copy()).float()[:self.num_frames]  # [8, 7, H, W]
             hit = (xray[:, 0:1] > 0).clone().float() * 2 - 1
@@ -72,14 +72,14 @@ class DiffusionDataset(Dataset):
             sample["xray_lr"] = torch.nn.functional.interpolate(xray_lr, size=(self.size, self.size), mode="nearest")
 
             # read condition image
-            image_path = depth_path.replace("xrays", "images").replace(".npz", ".png")
+            image_path = xray_path.replace("xrays", "images").replace(".npz", ".png")
             image_values_pil = Image.open(image_path)
             
             # filter
             _, _, _, mask = image_values_pil.split()
-            depth = (xrays[0, 0] > 0).astype(np.float32)
-            mask = (np.array(mask.resize(depth.shape)) / 255 > 0.5).astype(np.float32)
-            iou = (mask * depth).sum() / np.maximum(mask, depth).sum()
+            xray = (xrays[0, 0] > 0).astype(np.float32)
+            mask = (np.array(mask.resize(xray.shape)) / 255 > 0.5).astype(np.float32)
+            iou = (mask * xray).sum() / np.maximum(mask, xray).sum()
             assert iou > 0.7, f"iou: {iou}"
 
             image_values_pil = image_values_pil.convert("RGB")
@@ -107,16 +107,16 @@ class UpsamplerDataset(Dataset):
         self.near = near
         self.far = far
         self.num_frames = num_frames
-        self.depth_paths = glob.glob(os.path.join(root_dir, "xrays/**/*.npz"), recursive=True)
-        sorted(self.depth_paths)
+        self.xray_paths = glob.glob(os.path.join(root_dir, "xrays/**/*.npz"), recursive=True)
+        sorted(self.xray_paths)
         if phase == "train":
-            del self.depth_paths[::10]
-            random.shuffle(self.depth_paths)
+            del self.xray_paths[::10]
+            random.shuffle(self.xray_paths)
         elif phase == "val":
-            self.depth_paths = self.depth_paths[::10]
+            self.xray_paths = self.xray_paths[::10]
         else:
-            self.depth_paths = self.depth_paths
-        self.num_samples = len(self.depth_paths)        
+            self.xray_paths = self.xray_paths
+        self.num_samples = len(self.xray_paths)        
 
     def __len__(self):
         return self.num_samples
@@ -138,9 +138,9 @@ class UpsamplerDataset(Dataset):
         """
         try:
             sample = {}
-            xray_path = self.depth_paths[idx]
-            depth_path = xray_path
-            xrays = self.load_xrays(depth_path)
+            xray_path = self.xray_paths[idx]
+            xray_path = xray_path
+            xrays = self.load_xrays(xray_path)
 
             xray = torch.from_numpy(xrays.copy()).float()[:self.num_frames]  # [8, 7, H, W]
             hit = (xray[:, 0:1] > 0).clone().float() * 2 - 1
@@ -153,14 +153,14 @@ class UpsamplerDataset(Dataset):
             sample["xray_lr"] = torch.nn.functional.interpolate(xray, size=(self.size // 4, self.size // 4), mode="nearest")
 
             # read condition image
-            image_path = depth_path.replace("xrays", "images").replace(".npz", ".png")
+            image_path = xray_path.replace("xrays", "images").replace(".npz", ".png")
             image_values_pil = Image.open(image_path)
             
             # filter
             _, _, _, mask = image_values_pil.split()
-            depth = (xrays[0, 0] > 0).astype(np.float32)
-            mask = (np.array(mask.resize(depth.shape)) / 255 > 0.5).astype(np.float32)
-            iou = (mask * depth).sum() / np.maximum(mask, depth).sum()
+            xray = (xrays[0, 0] > 0).astype(np.float32)
+            mask = (np.array(mask.resize(xray.shape)) / 255 > 0.5).astype(np.float32)
+            iou = (mask * xray).sum() / np.maximum(mask, xray).sum()
             assert iou > 0.7, f"iou: {iou}"
 
             image_values_pil = image_values_pil.convert("RGB")

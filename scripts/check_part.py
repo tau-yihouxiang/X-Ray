@@ -62,7 +62,7 @@ def get_rays(directions, c2w):
     return rays_o, rays_d
  
 
-def depth_to_pcd_normals(GenDepths, GenNormals, GenColors):
+def xray_to_pcd(GenDepths, GenNormals, GenColors):
     camera_angle_x = 0.8575560450553894
     image_width = GenDepths.shape[-1]
     image_height = GenDepths.shape[-2]
@@ -101,8 +101,8 @@ def depth_to_pcd_normals(GenDepths, GenNormals, GenColors):
     return xyz, normals, colors
 
 
-def load_depths( depths_path):
-	loaded_data = np.load(depths_path)
+def load_xray( xray_path):
+	loaded_data = np.load(xray_path)
 
 	loaded_sparse_matrix = csr_matrix((loaded_data['data'], loaded_data['indices'], loaded_data['indptr']), shape=loaded_data['shape'])
 
@@ -113,16 +113,16 @@ def load_depths( depths_path):
 instance_data_root = "/hdd/taohu/Data/Objaverse/Data/Render/Objaverse_XRay"
 obj_paths = glob.glob(os.path.join("/hdd/taohu/Data/Objaverse/Data/hf-objaverse-v1/glbs", "**/*.glb"), recursive=True)
 
-depths_paths = glob.glob(os.path.join(instance_data_root, "**/*.npz"), recursive=True)
+xray_paths = glob.glob(os.path.join(instance_data_root, "**/*.npz"), recursive=True)
 # shuffle
-sorted(depths_paths)
+sorted(xray_paths)
 
 near = 0.6
 far = 2.4
 
-for depth_path in depths_paths[::10]:
-    print(depth_path)
-    xrays = load_depths(depth_path)[:8]
+for xray_path in xray_paths[::10]:
+    print(xray_path)
+    xrays = load_xray(xray_path)[:8]
     GenDepths = xrays[:, 0:1]
     GenNormals = xrays[:, 1:4]
     GenNormals = GenNormals / (np.linalg.norm(GenNormals, axis=1, keepdims=True) + 1e-8)
@@ -142,16 +142,16 @@ for depth_path in depths_paths[::10]:
 
     os.makedirs("logs", exist_ok=True)
     os.makedirs("logs/parts", exist_ok=True)
-    torchvision.utils.save_image(torch.tensor((D - near) / (far - near)), "logs/xrays.png", nrow=16, padding=0)
+    torchvision.utils.save_image(torch.tensor((D - near) / (far - near)), "logs/depths.png", nrow=16, padding=0)
     torchvision.utils.save_image(torch.tensor(N * 0.5 + 0.5), "logs/normals.png", nrow=16, padding=0)
     torchvision.utils.save_image(torch.tensor(C), "logs/colors.png", nrow=16, padding=0)
 
     # save image
-    image_path = depth_path.replace("xrays", "images").replace("npz", "png")
+    image_path = xray_path.replace("xrays", "images").replace("npz", "png")
     image = Image.open(image_path)
     image.save("logs/image.png")
 
-    gen_pts, gen_normals, gen_colors = depth_to_pcd_normals(GenDepths, GenNormals, GenColors)
+    gen_pts, gen_normals, gen_colors = xray_to_pcd(GenDepths, GenNormals, GenColors)
     # random gaussian noise
     gen_pts += np.random.randn(*gen_pts.shape) * 0.003
     gen_colors += np.random.randn(*gen_colors.shape) * 0.003
@@ -163,8 +163,8 @@ for depth_path in depths_paths[::10]:
     pcd.colors = o3d.utility.Vector3dVector(gen_colors)
     o3d.io.write_point_cloud("logs/recon.ply", pcd)
 
-    # extract filename from depth_path
-    filename = depth_path.split("/")[-2]
+    # extract filename from xray_path
+    filename = xray_path.split("/")[-2]
     obj_path = None
     for obj_path in obj_paths:
         if filename in obj_path:
@@ -176,13 +176,13 @@ for depth_path in depths_paths[::10]:
     mesh.export("logs/gt.ply")
 
     # load ground truth .glb file
-    glb_path = depth_path.replace("xrays", "meshes").replace(".npz", ".glb")
+    glb_path = xray_path.replace("xrays", "meshes").replace(".npz", ".glb")
 
     shutil.rmtree("logs/parts")
     os.makedirs("logs/parts", exist_ok=True)
     
     for i in range(16):
-        gen_pts, gen_normals, gen_colors = depth_to_pcd_normals(GenDepths[i:i+1], GenNormals[i:i+1], GenColors[i:i+1])
+        gen_pts, gen_normals, gen_colors = xray_to_pcd(GenDepths[i:i+1], GenNormals[i:i+1], GenColors[i:i+1])
         if len(gen_pts) == 0:
             continue
         pcd = o3d.geometry.PointCloud()
@@ -209,7 +209,7 @@ for depth_path in depths_paths[::10]:
     # o3d.io.write_point_cloud("logs/merged_normal.ply", merged_pcd)
 
     # merged_pcd.colors = o3d.utility.Vector3dVector(np.asarray(merged_pcd.colors) * 0.0 + 1.0)
-    # o3d.io.write_point_cloud("logs/merged_depth.ply", merged_pcd)
+    # o3d.io.write_point_cloud("logs/merged_xray.ply", merged_pcd)
 
     # save GenDepths, GenNormals, GenColors as a sequential video
     GenDepths = GenDepths / (far - near)
