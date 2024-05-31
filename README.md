@@ -61,6 +61,12 @@ $ python evaluate_diffusion.py --exp_diffusion Objaverse_XRay --date_root Data/O
 $ python evaluate_upsampler.py --exp_diffusion Objaverse_XRay --exp_upsampler Objaverse_XRay_upsampler
 ```
 
+## TODO list 
+- [x] Release Paper Details.
+- [x] Release the training and testing source code.
+- [ ] Release the pre-trained model. 
+- [ ] Release the gradio demo. 
+
 Checkpoints and Online Demo are comming soon!
 
 ## Authors
