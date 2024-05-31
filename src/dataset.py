@@ -23,7 +23,7 @@ class DiffusionDataset(Dataset):
         self.near = near
         self.far = far
         self.num_frames = num_frames
-        self.depth_paths = glob.glob(os.path.join(root_dir, "depths/**/*.npz"), recursive=True)
+        self.depth_paths = glob.glob(os.path.join(root_dir, "xrays/**/*.npz"), recursive=True)
         sorted(self.depth_paths)
         if phase == "train":
             del self.depth_paths[::10]
@@ -37,8 +37,8 @@ class DiffusionDataset(Dataset):
     def __len__(self):
         return self.num_samples
 
-    def load_depths(self, depths_path):
-        loaded_data = np.load(depths_path)
+    def load_xrays(self, xrays_path):
+        loaded_data = np.load(xrays_path)
 
         loaded_sparse_matrix = csr_matrix((loaded_data['data'], loaded_data['indices'], loaded_data['indptr']), shape=loaded_data['shape'])
 
@@ -58,9 +58,9 @@ class DiffusionDataset(Dataset):
             sample = {}
             xray_path = self.depth_paths[idx]
             depth_path = xray_path
-            depths = self.load_depths(depth_path)
+            xrays = self.load_xrays(depth_path)
 
-            xray = torch.from_numpy(depths.copy()).float()[:self.num_frames]  # [8, 7, H, W]
+            xray = torch.from_numpy(xrays.copy()).float()[:self.num_frames]  # [8, 7, H, W]
             hit = (xray[:, 0:1] > 0).clone().float() * 2 - 1
             xray[:, 0] = (xray[:, 0] - self.near) / (self.far - self.near) * 2 - 1
             xray[:, 1:4] = F.normalize(xray[:, 1:4], dim=1)
@@ -72,12 +72,12 @@ class DiffusionDataset(Dataset):
             sample["xray_lr"] = torch.nn.functional.interpolate(xray_lr, size=(self.size, self.size), mode="nearest")
 
             # read condition image
-            image_path = depth_path.replace("depths", "images").replace(".npz", ".png")
+            image_path = depth_path.replace("xrays", "images").replace(".npz", ".png")
             image_values_pil = Image.open(image_path)
             
             # filter
             _, _, _, mask = image_values_pil.split()
-            depth = (depths[0, 0] > 0).astype(np.float32)
+            depth = (xrays[0, 0] > 0).astype(np.float32)
             mask = (np.array(mask.resize(depth.shape)) / 255 > 0.5).astype(np.float32)
             iou = (mask * depth).sum() / np.maximum(mask, depth).sum()
             assert iou > 0.7, f"iou: {iou}"
@@ -107,7 +107,7 @@ class UpsamplerDataset(Dataset):
         self.near = near
         self.far = far
         self.num_frames = num_frames
-        self.depth_paths = glob.glob(os.path.join(root_dir, "depths/**/*.npz"), recursive=True)
+        self.depth_paths = glob.glob(os.path.join(root_dir, "xrays/**/*.npz"), recursive=True)
         sorted(self.depth_paths)
         if phase == "train":
             del self.depth_paths[::10]
@@ -121,8 +121,8 @@ class UpsamplerDataset(Dataset):
     def __len__(self):
         return self.num_samples
 
-    def load_depths(self, depths_path):
-        loaded_data = np.load(depths_path)
+    def load_xrays(self, xrays_path):
+        loaded_data = np.load(xrays_path)
         loaded_sparse_matrix = csr_matrix((loaded_data['data'], loaded_data['indices'], loaded_data['indptr']), shape=loaded_data['shape'])
         original_shape = (16, 1+3+3, 256, 256)
         restored_array = loaded_sparse_matrix.toarray().reshape(original_shape)
@@ -140,9 +140,9 @@ class UpsamplerDataset(Dataset):
             sample = {}
             xray_path = self.depth_paths[idx]
             depth_path = xray_path
-            depths = self.load_depths(depth_path)
+            xrays = self.load_xrays(depth_path)
 
-            xray = torch.from_numpy(depths.copy()).float()[:self.num_frames]  # [8, 7, H, W]
+            xray = torch.from_numpy(xrays.copy()).float()[:self.num_frames]  # [8, 7, H, W]
             hit = (xray[:, 0:1] > 0).clone().float() * 2 - 1
             xray[:, 0] = (xray[:, 0] - self.near) / (self.far - self.near) * 2 - 1 # (0-0.6) / (2.4 - 0.6) = -0.3333
             xray[:, 1:4] = F.normalize(xray[:, 1:4], dim=1)
@@ -153,12 +153,12 @@ class UpsamplerDataset(Dataset):
             sample["xray_lr"] = torch.nn.functional.interpolate(xray, size=(self.size // 4, self.size // 4), mode="nearest")
 
             # read condition image
-            image_path = depth_path.replace("depths", "images").replace(".npz", ".png")
+            image_path = depth_path.replace("xrays", "images").replace(".npz", ".png")
             image_values_pil = Image.open(image_path)
             
             # filter
             _, _, _, mask = image_values_pil.split()
-            depth = (depths[0, 0] > 0).astype(np.float32)
+            depth = (xrays[0, 0] > 0).astype(np.float32)
             mask = (np.array(mask.resize(depth.shape)) / 255 > 0.5).astype(np.float32)
             iou = (mask * depth).sum() / np.maximum(mask, depth).sum()
             assert iou > 0.7, f"iou: {iou}"

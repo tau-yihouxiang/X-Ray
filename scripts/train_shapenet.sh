@@ -16,7 +16,7 @@ CUDA_VISIBLE_DEVICES=0,1,2 accelerate launch \
     --height=64 \
     --num_frames=8 \
     --checkpointing_steps=1000 --checkpoints_total_limit=3 \
-    --learning_rate=2e-5 --lr_warmup_steps=0 \
+    --learning_rate=4e-5 --lr_warmup_steps=0 \
     --seed=1234 \
     --num_workers=6 \
     --validation_steps=1000 \
@@ -24,3 +24,4 @@ CUDA_VISIBLE_DEVICES=0,1,2 accelerate launch \
     --near 0.6 \
     --far 1.8 \
     --resume_from_checkpoint="latest"
+    # --pretrain_unet='Output/ShapeNetV2_Car_1/checkpoint-796000'

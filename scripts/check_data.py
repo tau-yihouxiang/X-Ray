@@ -72,7 +72,7 @@ def load_depths( depths_path):
 	restored_array = loaded_sparse_matrix.toarray().reshape(original_shape)
 	return restored_array
 
-instance_data_root = "Data/Objaverse_XRay/depths/a57dd10038a14ef8a141e0e7c3bc3e27"
+instance_data_root = "Data/Objaverse_XRay/xrays/a57dd10038a14ef8a141e0e7c3bc3e27"
 # mesh_dir = "/data/taohu/Data/ShapeNet/ShapeNetCore.v2/02958343"
 
 depths_paths = glob.glob(os.path.join(instance_data_root, "**/*.npz"), recursive=True)
@@ -85,16 +85,16 @@ far = 1.8
 for depth_path in depths_paths:
     print(depth_path)
 
-    # depth_path = "Data/Objaverse_XRay/depths/a57dd10038a14ef8a141e0e7c3bc3e27/000.npz"
+    # depth_path = "Data/Objaverse_XRay/xrays/a57dd10038a14ef8a141e0e7c3bc3e27/000.npz"
 
-    depths = load_depths(depth_path)
-    depths = torch.from_numpy(depths).float()
-    GenDepths = depths[:, 0:1].expand(-1, 3, -1, -1)
+    xrays = load_depths(depth_path)
+    xrays = torch.from_numpy(xrays).float()
+    GenDepths = xrays[:, 0:1].expand(-1, 3, -1, -1)
     GenDepths = ((GenDepths - near) / (far - near)).clip(min=0, max=1)
-    GenNormals = depths[:, 1:4]
+    GenNormals = xrays[:, 1:4]
     GenNormals = F.normalize(GenNormals, p=2, dim=1)
     GenNormals = (GenNormals * 0.5 + 0.5).clip(min=0, max=1)
-    GenColors = depths[:, 4:7].clip(min=0, max=1)
+    GenColors = xrays[:, 4:7].clip(min=0, max=1)
     GenHits = (GenDepths > 0).float()
 
     # gray
@@ -110,7 +110,7 @@ for depth_path in depths_paths:
     torchvision.utils.save_image(XRay, "logs/xray.png", nrow=16, padding=0)
 
     # save image
-    image_path = depth_path.replace("depths", "images").replace("npz", "png")
+    image_path = depth_path.replace("xrays", "images").replace("npz", "png")
     image = Image.open(image_path)
     # convert to rgba image to white color image using PIL
     white_image = Image.new("RGB", image.size, "WHITE")

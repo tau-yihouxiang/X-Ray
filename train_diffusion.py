@@ -620,11 +620,19 @@ def main():
     vae = AutoencoderKLTemporalDecoder.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision, variant="fp16")
 
-    unet = UNetSpatioTemporalConditionModel.from_config(
-        "src/xray_unet.json",
-        low_cpu_mem_usage=True,
-        variant="fp16",
-    )
+    if args.pretrain_unet is not None:
+        unet = UNetSpatioTemporalConditionModel.from_pretrained(
+            args.pretrain_unet, subfolder="unet", revision=args.revision)
+
+        # update
+        global_step = int(args.pretrain_unet.split("-")[1])
+        first_epoch = 0
+    else:
+        unet = UNetSpatioTemporalConditionModel.from_config(
+            "src/xray_unet.json",
+            low_cpu_mem_usage=True,
+            variant="fp16",
+        )
 
     # Freeze vae and image_encoder
     vae.requires_grad_(False)
@@ -888,7 +896,7 @@ def main():
                 # save xray and conditional_pixel_values as images.
                 if global_step % 50 == 0 and accelerator.is_main_process:
                     os.makedirs(os.path.join(args.output_dir, "samples"), exist_ok=True)
-                    torchvision.utils.save_image(xray[0, :, 0:1], os.path.join(args.output_dir, "samples", "depths.png"), normalize=True, nrow=4)
+                    torchvision.utils.save_image(xray[0, :, 0:1], os.path.join(args.output_dir, "samples", "xrays.png"), normalize=True, nrow=4)
                     torchvision.utils.save_image(xray[0, :, 1:4], os.path.join(args.output_dir, "samples", "normals.png"), normalize=True, nrow=4)
                     torchvision.utils.save_image(xray[0, :, 4:7], os.path.join(args.output_dir, "samples", "colors.png"), normalize=True, nrow=4)
                     torchvision.utils.save_image(conditional_pixel_values[0:1], os.path.join(args.output_dir, "samples", "images.png"), normalize=True)
@@ -1085,7 +1093,7 @@ def main():
                             # val_image_paths = val_dataset.depth_paths[:args.num_validation_images]
                             for val_img_idx in range(args.num_validation_images):
                                 num_frames = args.num_frames
-                                image_path = val_dataset.depth_paths[val_img_idx].replace("depths", "images").replace(".npz", ".png")
+                                image_path = val_dataset.depth_paths[val_img_idx].replace("xrays", "images").replace(".npz", ".png")
                                 image_val = load_image(image_path).convert("RGB").resize((args.width * 8, args.height * 8))
                                 image_val.save(f"{val_save_dir}/step_{global_step}_val_img_{val_img_idx}_original.png")
                                 outputs = pipeline(

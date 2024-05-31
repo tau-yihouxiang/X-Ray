@@ -122,11 +122,11 @@ far = 2.4
 
 for depth_path in depths_paths[::10]:
     print(depth_path)
-    depths = load_depths(depth_path)[:8]
-    GenDepths = depths[:, 0:1]
-    GenNormals = depths[:, 1:4]
+    xrays = load_depths(depth_path)[:8]
+    GenDepths = xrays[:, 0:1]
+    GenNormals = xrays[:, 1:4]
     GenNormals = GenNormals / (np.linalg.norm(GenNormals, axis=1, keepdims=True) + 1e-8)
-    GenColors = depths[:, 4:7]
+    GenColors = xrays[:, 4:7]
 
     # vis
     nohit = GenDepths == 0
@@ -142,12 +142,12 @@ for depth_path in depths_paths[::10]:
 
     os.makedirs("logs", exist_ok=True)
     os.makedirs("logs/parts", exist_ok=True)
-    torchvision.utils.save_image(torch.tensor((D - near) / (far - near)), "logs/depths.png", nrow=16, padding=0)
+    torchvision.utils.save_image(torch.tensor((D - near) / (far - near)), "logs/xrays.png", nrow=16, padding=0)
     torchvision.utils.save_image(torch.tensor(N * 0.5 + 0.5), "logs/normals.png", nrow=16, padding=0)
     torchvision.utils.save_image(torch.tensor(C), "logs/colors.png", nrow=16, padding=0)
 
     # save image
-    image_path = depth_path.replace("depths", "images").replace("npz", "png")
+    image_path = depth_path.replace("xrays", "images").replace("npz", "png")
     image = Image.open(image_path)
     image.save("logs/image.png")
 
@@ -176,7 +176,7 @@ for depth_path in depths_paths[::10]:
     mesh.export("logs/gt.ply")
 
     # load ground truth .glb file
-    glb_path = depth_path.replace("depths", "meshes").replace(".npz", ".glb")
+    glb_path = depth_path.replace("xrays", "meshes").replace(".npz", ".glb")
 
     shutil.rmtree("logs/parts")
     os.makedirs("logs/parts", exist_ok=True)

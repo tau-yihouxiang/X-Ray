@@ -801,7 +801,7 @@ def main():
                                 pcd.colors = o3d.utility.Vector3dVector(gen_colors)
                                 o3d.io.write_point_cloud(f"{val_save_dir}/step_{global_step}_val_img_{val_img_idx}_input.ply", pcd)
 
-                                image_path = val_image_paths[val_img_idx].replace("depths", "images").replace(".npz", ".png")
+                                image_path = val_image_paths[val_img_idx].replace("xrays", "images").replace(".npz", ".png")
                                 image_val = load_image(image_path).convert("RGB").resize((args.width * 2, args.height * 2), Image.BILINEAR)
                                 image_val.save(f"{val_save_dir}/step_{global_step}_val_img_{val_img_idx}_original.png")
                                 

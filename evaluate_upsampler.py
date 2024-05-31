@@ -121,8 +121,8 @@ if __name__ == "__main__":
 
         with torch.no_grad():
             depth_path = image_path.replace(".png", ".pt")
-            depths = torch.load(depth_path)
-            xray_lr = depths.clone().cuda()[None] # [8, 8, H, W]
+            xrays = torch.load(depth_path)
+            xray_lr = xrays.clone().cuda()[None] # [8, 8, H, W]
 
             image = load_image(image_path).resize((width * 2, height * 2), Image.BILINEAR).convert("RGB")
             conditional_pixel_values = (torchvision.transforms.ToTensor()(image).unsqueeze(0) * 2 - 1).half().cuda()

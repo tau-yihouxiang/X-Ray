@@ -175,7 +175,7 @@ if __name__ == "__main__":
         pcd_gen.normals = o3d.utility.Vector3dVector(gen_normals)
         pcd_gen.colors = o3d.utility.Vector3dVector(gen_colors[..., :3])
         
-        gt_path = image_path.replace("images", "depths").replace(".png", ".npz")
+        gt_path = image_path.replace("images", "xrays").replace(".png", ".npz")
         xray = load_depths(gt_path)[:8]
         GtDepths = xray[:, 0:1]
         GtNormals = xray[:, 1:4]
@@ -188,8 +188,8 @@ if __name__ == "__main__":
         pcd_gt.colors = o3d.utility.Vector3dVector(gt_colors)
 
         # normalize gt_pts and gen_pts
-        chamfer_distance, f_score = chamfer_distance_and_f_score(gt_pts, gen_pts, 0.1)
-        # if chamfer_distance is valid
+        chamfer_distance, f_score = chamfer_distance_and_f_score(gt_pts, gen_pts, threshold=0.01)
+        
         all_chamfer_distance += [chamfer_distance]
         all_f_score += [f_score]
         # save
@@ -197,7 +197,8 @@ if __name__ == "__main__":
         o3d.io.write_point_cloud(f"Output/{exp_name}/evaluate/{uid}_prd.ply", pcd_gen)
         o3d.io.write_point_cloud(f"Output/{exp_name}/evaluate/{uid}_gt.ply", pcd_gt)
 
-        progress_bar.set_postfix({"chamfer_distance": np.mean(all_chamfer_distance),
-                                  "f_score": np.mean(all_f_score)})
+        progress_bar.set_postfix({"CD": chamfer_distance,
+                                  "mean CD": np.mean(all_chamfer_distance),
+                                  "FS@0.01": np.mean(all_f_score)})
         progress_bar.update(1)
         

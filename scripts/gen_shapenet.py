@@ -255,7 +255,7 @@ def process_model(model_path):
 if __name__ == "__main__":
     root_dir = "/data/taohu/Data/ShapeNet/ShapeNetCore.v2_Clean"
     img_dir = "/data/taohu/Data/ShapeNet/ShapeNetV2_Car/images"
-    depth_dir = "/data/taohu/Data/ShapeNet/ShapeNetV2_Car/depths"
+    depth_dir = "/data/taohu/Data/ShapeNet/ShapeNetV2_Car/xrays"
     image_height = 256
     image_width = 256
 

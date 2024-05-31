@@ -240,7 +240,7 @@ def process_model(model_path):
 if __name__ == "__main__":
     root_dir = "/hdd/taohu/Data/GSO/GSO"
     img_dir = "/hdd/taohu/Data/GSO/Rendering/images"
-    depth_dir = "/hdd/taohu/Data/GSO/Rendering/depths"
+    depth_dir = "/hdd/taohu/Data/GSO/Rendering/xrays"
     image_height = 256
     image_width = 256
 
