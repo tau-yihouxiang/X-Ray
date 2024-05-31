@@ -62,12 +62,11 @@ $ python evaluate_upsampler.py --exp_diffusion Objaverse_XRay --exp_upsampler Ob
 ```
 
 ## TODO list 
-- [x] Release Paper Details.
+- [x] Release paper details.
 - [x] Release the training and testing source code.
 - [ ] Release the pre-trained model. 
 - [ ] Release the gradio demo. 
 
-Checkpoints and Online Demo are comming soon!
 
 ## Authors
 [Tao Hu](https://tau-yihouxiang.github.io) et al.
