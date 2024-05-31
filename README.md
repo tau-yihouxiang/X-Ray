@@ -63,6 +63,7 @@ $ python evaluate_upsampler.py --exp_diffusion Objaverse_XRay --exp_upsampler Ob
 
 ## TODO list 
 - [x] Release paper details.
+- [x] Release the dataset.
 - [x] Release the training and testing source code.
 - [ ] Release the pre-trained model. 
 - [ ] Release the gradio demo. 
