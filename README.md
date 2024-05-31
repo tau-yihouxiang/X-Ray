@@ -1,3 +1,7 @@
+<p align="center">
+    <img src="docs/Logo.png" width="200" height=auto alt="Logo">
+</p>
+
 # X-Ray: A Sequential 3D Representation for Generation.
 
 <a href="https://tau-yihouxiang.github.io/projects/X-Ray/X-Ray.html"><img src="https://img.shields.io/badge/Project_Page-Online-EA3A97"></a> 
