@@ -144,7 +144,7 @@ class UpsamplerDataset(Dataset):
 
             xray = torch.from_numpy(xrays.copy()).float()[:self.num_frames]  # [8, 7, H, W]
             hit = (xray[:, 0:1] > 0).clone().float() * 2 - 1
-            xray[:, 0] = (xray[:, 0] - self.near) / (self.far - self.near) * 2 - 1 # (0-0.6) / (2.4 - 0.6) = -0.3333
+            xray[:, 0] = (xray[:, 0] - self.near) / (self.far - self.near) * 2 - 1
             xray[:, 1:4] = F.normalize(xray[:, 1:4], dim=1)
             xray[:, 4:7] = xray[:, 4:7] * 2 - 1
             xray = torch.cat([xray, hit], dim=1)

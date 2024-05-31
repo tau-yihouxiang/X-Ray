@@ -91,12 +91,8 @@ if __name__ == "__main__":
     height = 64
     width = 64
 
-    if "shapenet" in args.data_root.lower():
-        near = 0.6
-        far = 1.8
-    else:
-        near = 0.6
-        far = 2.4
+    near = 0.6
+    far = 1.8
 
     if "gso" in args.data_root.lower():
         val_dataset = DiffusionDataset(xray_root, height, num_frames=8, near=near, far=far, phase="all")

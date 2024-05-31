@@ -118,7 +118,7 @@ xray_paths = glob.glob(os.path.join(instance_data_root, "**/*.npz"), recursive=T
 sorted(xray_paths)
 
 near = 0.6
-far = 2.4
+far = 1.8
 
 for xray_path in xray_paths[::10]:
     print(xray_path)

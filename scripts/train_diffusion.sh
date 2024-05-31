@@ -22,5 +22,5 @@ CUDA_VISIBLE_DEVICES=3 accelerate launch \
     --validation_steps=1000 \
     --num_validation_images=5 \
     --near 0.6 \
-    --far 2.4 \
+    --far 1.8 \
     --resume_from_checkpoint="latest"

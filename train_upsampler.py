@@ -395,7 +395,7 @@ def parse_args():
     parser.add_argument(
         "--far",
         type=float,
-        default=2.4,
+        default=1.8,
         help=("the farest distance"),
     )
 

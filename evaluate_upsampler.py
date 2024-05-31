@@ -80,12 +80,9 @@ if __name__ == "__main__":
     parser.add_argument("--exp_diffusion", type=str, default="Objaverse_XRay", help="experiment name")
     args = parser.parse_args()
 
-    if "shapenet" in args.exp_upsampler.lower():
-        near = 0.5
-        far = 1.5
-    else:
-        near = 0.6
-        far = 2.4
+    near = 0.6
+    far = 1.8
+    
     num_frames = 8
 
     exp_upsampler = args.exp_upsampler
