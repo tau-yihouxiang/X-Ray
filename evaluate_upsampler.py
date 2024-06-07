@@ -151,6 +151,10 @@ if __name__ == "__main__":
         GenNormals = GenNormals.cpu().numpy()
         GenColors = GenColors.cpu().numpy()
 
+        GenDepths_ori = GenDepths.copy()
+        for i in range(GenDepths.shape[0]-1):
+            GenDepths[i+1] = np.where(GenDepths_ori[i+1] < GenDepths_ori[i], 0, GenDepths_ori[i+1])
+
         gen_pts, gen_normals, gen_colors = xray_to_pcd(GenDepths, GenNormals, GenColors)
         gen_pts = gen_pts - np.mean(gen_pts, axis=0)
         pcd = o3d.geometry.PointCloud()
@@ -162,7 +166,6 @@ if __name__ == "__main__":
         shutil.copy(image_path.replace(".png", "_prd.ply"), f"Output/{exp_upsampler}/evaluate/{uid}_lr_prd.ply")
 
         # copy prd ply to the folder
-        # shutil.copy(image_path.replace(".png", "_prd.ply"), f"Output/{exp_upsampler}/evaluate/{uid}_prd.ply")
         gt_pcd = o3d.io.read_point_cloud(image_path.replace(".png", "_gt.ply"))
         gt_pts = np.asarray(gt_pcd.points)
         gt_pts = gt_pts - np.mean(gt_pts, axis=0)
@@ -171,12 +174,13 @@ if __name__ == "__main__":
         gt_pcd.points = o3d.utility.Vector3dVector(gt_pts)
         o3d.io.write_point_cloud(f"Output/{exp_upsampler}/evaluate/{uid}_gt.ply", gt_pcd)
 
-        chamfer_distance, f_score = chamfer_distance_and_f_score(gt_pts, gen_pts, 0.1)
+        chamfer_distance, f_score = chamfer_distance_and_f_score(gt_pts, gen_pts, threshold=0.01)
         all_chamfer_distance += [chamfer_distance]
         all_f_score += [f_score]
 
-        progress_bar.set_postfix({"chamfer_distance": np.mean(all_chamfer_distance),
-                                  "f_score": np.mean(all_f_score)})
+        progress_bar.set_postfix({"CD": np.mean(all_chamfer_distance),
+                                  "FS@0.01": np.mean(all_f_score)})
         progress_bar.update(1)
-    print(f"{ckpt_name}: chamfer distance: {np.mean(all_chamfer_distance)}")
-    print(f"{ckpt_name}: F-score: {np.mean(all_f_score)}")
+
+    print(f"{ckpt_name}: CD: {np.mean(all_chamfer_distance)}")
+    print(f"{ckpt_name}: FS@0.01: {np.mean(all_f_score)}")

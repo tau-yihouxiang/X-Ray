@@ -489,7 +489,7 @@ def main():
         global_step = int(args.pretrain_model.split("-")[-1])
         first_epoch = 0
     else:
-        vae = AutoencoderKLTemporalDecoder.from_config("src/xray_decoder.json")
+        vae = AutoencoderKLTemporalDecoder.from_config("src/xray_decoder_large.json")
     
     vae.requires_grad_(True)
     vae_image.requires_grad_(False)
@@ -664,7 +664,7 @@ def main():
                 xray_lr = batch["xray_lr"].to(weight_dtype).to(
                 accelerator.device, non_blocking=True)
 
-                xray_lr = xray_lr + torch.randn_like(xray_lr) * random.uniform(0, 1) * 0.1
+                xray_lr = xray_lr + torch.randn_like(xray_lr) * random.uniform(0, 0.2)
 
                 xray = batch["xray"].to(weight_dtype).to(
                     accelerator.device, non_blocking=True
@@ -676,7 +676,8 @@ def main():
                 if global_step % 100 == 0 and accelerator.is_main_process:
                     os.makedirs(os.path.join(args.output_dir, "samples"), exist_ok=True)
                     torchvision.utils.save_image(xray_lr[0, :, 0:1], os.path.join(args.output_dir, "samples", "depths_low.png"), normalize=True, nrow=4)
-                    torchvision.utils.save_image(xray_lr[0, :, 1:4], os.path.join(args.output_dir, "samples", "colors_low.png"), normalize=True, nrow=4)
+                    torchvision.utils.save_image(xray_lr[0, :, 1:4], os.path.join(args.output_dir, "samples", "normals_low.png"), normalize=True, nrow=4)
+                    torchvision.utils.save_image(xray_lr[0, :, 4:7], os.path.join(args.output_dir, "samples", "colors_low.png"), normalize=True, nrow=4)
                     torchvision.utils.save_image(xray[0, :, 0:1], os.path.join(args.output_dir, "samples", "depths_high.png"), normalize=True, nrow=4)
                     torchvision.utils.save_image(xray[0, :, 1:4], os.path.join(args.output_dir, "samples", "normals_high.png"), normalize=True, nrow=4)
                     torchvision.utils.save_image(xray[0, :, 4:7], os.path.join(args.output_dir, "samples", "colors_high.png"), normalize=True, nrow=4)
@@ -687,6 +688,7 @@ def main():
                     # torchvision.utils.save_image(visual, os.path.join(args.output_dir, "samples", "pixel_value_alighed.png"), normalize=True)
 
                 with torch.no_grad():
+                    conditional_pixel_values = conditional_pixel_values + torch.randn_like(conditional_pixel_values) * random.uniform(0, 0.2)
                     conditional_latents = vae_image.encode(conditional_pixel_values).latent_dist.mode()
 
                 # Concatenate the `conditional_latents` with the `noisy_latents`.
@@ -699,13 +701,12 @@ def main():
                     xray_input = xray_input.flatten(0, 1)
                     model_pred = vae(xray_input, num_frames=args.num_frames).sample
                     model_pred = model_pred.reshape(-1, args.num_frames, *model_pred.shape[1:])
-                # MSE loss
 
                 xray = xray.float()
                 H = (xray[:, :, -1:] > 0.0).detach().expand(-1, -1, 7, -1, -1)
                 hit_loss = F.binary_cross_entropy_with_logits(model_pred[:, :, -1:], xray[:, :, -1:] * 0.5 + 0.5)
                 surface_loss = F.mse_loss(model_pred[:, :, :-1][H], xray[:, :, :-1][H])
-                recon_loss = 0.1 * F.mse_loss(model_pred, xray)
+                recon_loss = 0.01 * F.mse_loss(model_pred, xray)
                 loss = hit_loss + surface_loss + recon_loss
 
                 # Gather the losses across all processes for logging (if we use distributed training).
@@ -779,7 +780,7 @@ def main():
                             val_image_paths = val_dataset.xray_paths[:args.num_validation_images]
                             for val_img_idx in range(args.num_validation_images):
                                 xray_lr = val_dataset[val_img_idx]["xray_lr"].to(accelerator.device, dtype=weight_dtype)[None]
-                                xray_lr = xray_lr + torch.randn_like(xray_lr) * random.uniform(0, 1) * 0.1
+                                xray_lr = xray_lr + torch.randn_like(xray_lr) * random.uniform(0, 0.2)
 
                                 xray_lr_0 = xray_lr[0]
                                 GenDepths = (xray_lr_0[:, 0:1] * 0.5 + 0.5) * (args.far - args.near) + args.near
@@ -789,7 +790,7 @@ def main():
                                 GenDepths[GenDepths >= args.far] = 0
                                 GenNormals = F.normalize(xray_lr_0[:, 1:4], dim=1)
                                 GenNormals[GenHits.repeat(1, 3, 1, 1) == 0] = 0
-                                GenColors = (xray_lr_0[:, 1:4] * 0.5 + 0.5).clip(0, 1)
+                                GenColors = (xray_lr_0[:, 4:7] * 0.5 + 0.5).clip(0, 1)
                                 GenColors[GenHits.repeat(1, 3, 1, 1) == 0] = 0
                                 GenDepths = GenDepths.cpu().numpy()
                                 GenNormals = GenNormals.cpu().numpy()

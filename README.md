@@ -12,7 +12,7 @@
 
 
 ## Introduction
-This repository contains the official implementation of the paper "X-Ray: A Sequential 3D Representation for Generation". We propose a novel 3D representation, X-Ray, that encodes the 3D structure of an object in a sequential manner. The X-Ray representation is a sequence of 2D images, each of which represents a cross-section of the object along a specific direction. We demonstrate that the X-Ray representation can be used to generate high-quality 3D shapes and poses. We show that our method can be used to generate 3D objects with both inside and outside shape and appearance.
+We introduce X-Ray, a novel 3D sequential representation inspired by the penetrability of x-ray scans. X-Ray transforms a 3D object into a series of surface frames at different layers, making it suitable for generating 3D models from images. Our method utilizes ray casting from the camera center to capture geometric and textured details, including depth, normal, and color, across all intersected surfaces. This process efficiently condenses the whole 3D object into a multi-frame video format, motivating the utilize of a network architecture similar to those in video diffusion models. This design ensures an efficient 3D representation by focusing solely on surface information. We demonstrate the practicality and adaptability of our X-Ray representation by synthesizing the complete visible and hidden surfaces of a 3D object from a single input image, which paves the way for new 3D representation research and practical applications. 
 
 <p align="center">
     <img width="720" src="https://tau-yihouxiang.github.io/projects/X-Ray/files/teaser.png"/>

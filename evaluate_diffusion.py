@@ -193,9 +193,7 @@ if __name__ == "__main__":
         o3d.io.write_point_cloud(f"Output/{exp_name}/evaluate/{uid}_prd.ply", pcd_gen)
         o3d.io.write_point_cloud(f"Output/{exp_name}/evaluate/{uid}_gt.ply", pcd_gt)
 
-        progress_bar.set_postfix({
-                                  # "CD": chamfer_distance,
-                                  "CD": np.mean(all_chamfer_distance),
+        progress_bar.set_postfix({"CD": np.mean(all_chamfer_distance),
                                   "FS@0.01": np.mean(all_f_score)})
         progress_bar.update(1)
         
