@@ -72,6 +72,10 @@ $ python evaluate_upsampler.py --exp_diffusion Objaverse_XRay --exp_upsampler Ob
 ## Authors
 [Tao Hu](https://tau-yihouxiang.github.io) et al.
 
+## Acknowledgement
+- The model is related to [Diffusers](https://github.com/huggingface/diffusers) and [Stability AI](https://github.com/Stability-AI/generative-models); 
+- The source code is mainly based on [SVD Xtend](https://github.com/pixeli99/SVD_Xtend), which can train Stable Video Diffusion from scratch.
+
 
 ## Citation
 If you find this work useful for your research, please cite our paper:
