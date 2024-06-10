@@ -169,11 +169,11 @@ for xray_path in xray_paths[::10]:
     for obj_path in obj_paths:
         if filename in obj_path:
             break
-    # shutil.copy(obj_path, "logs/gt.glb")
-    # load .glb file and export as .ply
-    mesh = trimesh.load(obj_path,  force='mesh', process=False)
-    mesh.visual = mesh.visual.to_color()
-    mesh.export("logs/gt.ply")
+    # # shutil.copy(obj_path, "logs/gt.glb")
+    # # load .glb file and export as .ply
+    # mesh = trimesh.load(obj_path,  force='mesh', process=False)
+    # mesh.visual = mesh.visual.to_color()
+    # mesh.export("logs/gt.ply")
 
     # load ground truth .glb file
     glb_path = xray_path.replace("xrays", "meshes").replace(".npz", ".glb")
