@@ -42,6 +42,18 @@ $ cat 0*.zip > Objaverse_XRay.zip
 $ unzip Objaverse_XRay.zip
 $ ln -s /path/to/Objaverse_XRay Data/Objaverse_XRay
 ```
+#### Preprocess rendering image and obtain X-Ray for your own dataset.
+* Render the mesh to obtain the image and camera parameters.
+```bash
+$ cd preprocess/get_image
+$ bash custom/render_mesh.sh
+```
+* Obtain the X-Ray representation.
+```bash
+$ cd preprocess/get_xray
+$ python get_xray.py
+```
+
 * A minimal dataset is located in ./example/dataset
 
 ## Training
@@ -65,6 +77,7 @@ $ python evaluate_upsampler.py --exp_diffusion Objaverse_XRay --exp_upsampler Ob
 - [x] Release paper details.
 - [x] Release the dataset.
 - [x] Release the training and testing source code.
+- [x] Release the preprocessing code.
 - [ ] Release the pre-trained model. 
 - [ ] Release the gradio demo. 
 
