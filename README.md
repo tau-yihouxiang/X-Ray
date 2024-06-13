@@ -56,12 +56,16 @@ $ python get_xray.py
 
 * load xray from .npz file
 ```python
+from scipy.sparse import csr_matrix
+import numpy as np
+
 def load_xray(xray_path):
     loaded_data = np.load(xray_path)
     loaded_sparse_matrix = csr_matrix((loaded_data['data'], loaded_data['indices'], loaded_data['indptr']), shape=loaded_data['shape'])
     original_shape = (16, 1+3+3, 256, 256)
     restored_array = loaded_sparse_matrix.toarray().reshape(original_shape)
     return restored_array
+xray = load_xray('example/dataset/xrays/0a0bc2921e5246a28732bf5584c251d1/000.npz')
 ```
 
 * A minimal dataset is located in ./example/dataset
