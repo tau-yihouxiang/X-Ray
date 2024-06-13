@@ -54,7 +54,7 @@ $ cd preprocess/get_xray
 $ python get_xray.py
 ```
 
-* load xray from .npy file
+* load xray from .npz file
 ```python
 def load_xray(xray_path):
     loaded_data = np.load(xray_path)
