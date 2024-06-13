@@ -706,8 +706,8 @@ def main():
                 H = (xray[:, :, -1:] > 0.0).detach().expand(-1, -1, 7, -1, -1)
                 hit_loss = F.binary_cross_entropy_with_logits(model_pred[:, :, -1:], xray[:, :, -1:] * 0.5 + 0.5)
                 surface_loss = F.mse_loss(model_pred[:, :, :-1][H], xray[:, :, :-1][H])
-                recon_loss = 0.01 * F.mse_loss(model_pred, xray)
-                loss = hit_loss + surface_loss + recon_loss
+                # recon_loss = 0.01 * F.mse_loss(model_pred, xray)
+                loss = hit_loss + surface_loss
 
                 # Gather the losses across all processes for logging (if we use distributed training).
                 avg_loss = accelerator.gather(
@@ -725,7 +725,9 @@ def main():
             # Checks if the accelerator has performed an optimization step behind the scenes
             if accelerator.sync_gradients:
                 progress_bar.update(1)
-                accelerator.log({"train_loss": train_loss}, step=global_step)
+                accelerator.log({"train_loss": train_loss, 
+                                 "hit_loss": hit_loss, 
+                                 "surface_loss": surface_loss}, step=global_step)
                 train_loss = 0.0
 
                 if accelerator.is_main_process:

@@ -74,7 +74,7 @@ class TemporalDecoder(nn.Module):
             padding=1,
         )
 
-        conv_out_kernel_size = (3, 1, 1)
+        conv_out_kernel_size = (3, 3, 3)
         padding = [int(k // 2) for k in conv_out_kernel_size]
         self.time_conv_out = torch.nn.Conv3d(
             in_channels=out_channels,

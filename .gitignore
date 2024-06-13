@@ -5,3 +5,4 @@ Data/
 logs/
 *.DS_Store
 test/
+*tmp.out

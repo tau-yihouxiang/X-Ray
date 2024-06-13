@@ -54,7 +54,18 @@ $ cd preprocess/get_xray
 $ python get_xray.py
 ```
 
+* load xray from .npy file
+```python
+def load_xray(xray_path):
+    loaded_data = np.load(xray_path)
+    loaded_sparse_matrix = csr_matrix((loaded_data['data'], loaded_data['indices'], loaded_data['indptr']), shape=loaded_data['shape'])
+    original_shape = (16, 1+3+3, 256, 256)
+    restored_array = loaded_sparse_matrix.toarray().reshape(original_shape)
+    return restored_array
+```
+
 * A minimal dataset is located in ./example/dataset
+
 
 ## Training
 ### Train Diffusion Model
