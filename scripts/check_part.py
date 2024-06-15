@@ -152,10 +152,6 @@ for xray_path in xray_paths[::10]:
     image.save("logs/image.png")
 
     gen_pts, gen_normals, gen_colors = xray_to_pcd(GenDepths, GenNormals, GenColors)
-    # random gaussian noise
-    gen_pts += np.random.randn(*gen_pts.shape) * 0.003
-    gen_colors += np.random.randn(*gen_colors.shape) * 0.003
-    gen_colors = np.clip(gen_colors, 0, 1)
 
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(gen_pts)

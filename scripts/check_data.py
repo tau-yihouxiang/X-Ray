@@ -72,7 +72,7 @@ def load_xray( xray_path):
 	restored_array = loaded_sparse_matrix.toarray().reshape(original_shape)
 	return restored_array
 
-instance_data_root = "Data/Objaverse_XRay/xrays/a57dd10038a14ef8a141e0e7c3bc3e27"
+instance_data_root = "Data/Objaverse_XRay/xrays/"
 # mesh_dir = "/data/taohu/Data/ShapeNet/ShapeNetCore.v2/02958343"
 
 xray_paths = glob.glob(os.path.join(instance_data_root, "**/*.npz"), recursive=True)
@@ -81,6 +81,8 @@ random.shuffle(xray_paths)
 
 near = 0.6
 far = 1.8
+
+os.makedirs("logs", exist_ok=True)
 
 for xray_path in xray_paths:
     print(xray_path)

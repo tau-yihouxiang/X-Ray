@@ -4,4 +4,4 @@
 
 # # state 2: upsample to high-resolution X-Ray
 python evaluate_upsampler.py --exp_diffusion ShapeNetV2_Car_1 \
-                             --exp_upsampler ShapeNetV2_Car_upsampler_large_loss_conv3d
+                             --exp_upsampler ShapeNetV2_Car_upsampler_large_normal_similarity

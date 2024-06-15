@@ -1,7 +1,7 @@
 #/bin/bash
 
 export MODEL_NAME="stabilityai/stable-video-diffusion-img2vid"
-export OUTPUT_DIR="Output/ShapeNetV2_Car_upsampler_large_loss_conv3d"
+export OUTPUT_DIR="Output/ShapeNetV2_Car_upsampler_large_normal_similarity"
 export INSTANCE_DIR="Data/ShapeNetV2_Car"
 export NUM_GPUS=3
 
@@ -23,5 +23,5 @@ CUDA_VISIBLE_DEVICES=0,1,2 accelerate launch \
     --num_validation_images=5 \
     --near=0.6 \
     --far=1.8 \
+    --resume_from_checkpoint="latest"
     # --pretrain_model Output/ShapeNetV2_Car_upsampler_large_loss/checkpoint-350000
-    # --resume_from_checkpoint="latest"

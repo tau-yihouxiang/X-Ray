@@ -49,11 +49,65 @@ from diffusers.utils import check_min_version, deprecate, is_wandb_available, lo
 from diffusers import AutoencoderKL
 import open3d as o3d
 from src.dataset import UpsamplerDataset
+from pytorch3d.ops import knn_points
 
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
 check_min_version("0.24.0.dev0")
 
 logger = get_logger(__name__, log_level="INFO")
+
+
+def normal_similarity_loss(points, k=20):
+    """
+    Calculate the loss function for normal similarity, which encourages neighboring points to have similar normals.
+    :param points: (B, N, 3) torch.Tensor, point cloud data
+    :param k: int, number of neighboring points
+    :return: torch.Tensor, normal similarity loss
+    """
+    B, N, _ = points.shape
+
+    # Perform kNN search using PyTorch3D
+    knn = knn_points(points, points, K=k, return_nn=True)
+    neighbors = knn.knn
+
+    centroid = torch.mean(neighbors, dim=2, keepdim=True)  # B x N x 1 x 3
+    neighbors_centered = neighbors - centroid  # B x N x k x 3
+
+    cov_matrix = torch.matmul(neighbors_centered.transpose(3, 2), neighbors_centered)  # B x N x 3 x 3
+    eigvals, eigvecs = torch.linalg.eigh(cov_matrix)  # B x N x 3 x 3
+
+    normals = eigvecs[:, :, :, 0]  # B x N x 3
+
+    # 计算相邻点法向量相似性损失
+    knn = knn_points(points, points, K=10, return_nn=True)
+    loss = compute_similarity_loss(normals, knn.idx)
+
+    return loss
+
+def compute_similarity_loss(normals, knn_idx):
+    """
+    Calculate the loss function for normal similarity, which encourages neighboring points to have similar normals.
+    :param normals: (B, N, 3) torch.Tensor, normal vectors
+    :param knn_idx: (B, N, k) torch.Tensor, k-nearest neighbor indices
+    :return: torch.Tensor, similarity loss
+    """
+    B, N, k = knn_idx.shape
+
+    # Get the normals of neighboring points
+    knn_idx = knn_idx.view(B, -1)  # Flatten the indices
+    neighbor_normals = normals.gather(1, knn_idx.unsqueeze(-1).expand(-1, -1, 3))  # Get neighbor normals
+    neighbor_normals = neighbor_normals.view(B, N, k, 3)  # Reshape back to neighbor normals shape
+
+    # Expand normals
+    normals_expanded = normals.unsqueeze(2).expand(-1, -1, k, -1)  # B x N x k x 3
+
+    # Calculate cosine similarity
+    cos_sim = F.cosine_similarity(normals_expanded, neighbor_normals, dim=-1)  # B x N x k
+
+    # Similarity loss, 1 minus cosine similarity is used as the loss since higher cosine similarity means more similarity
+    similarity_loss = 1 - cos_sim.abs()
+
+    return similarity_loss.mean()
 
 
 def get_rays(directions, c2w):
@@ -103,6 +157,59 @@ def xray_to_pcd(GenDepths, GenNormals, GenColors):
     xyz = rays_origins + ray_directions * GenDepths
 
     return xyz, normals, colors
+
+
+def get_rays_torch(directions, c2w):
+    # Rotate ray directions from camera coordinate to the world coordinate
+    rays_d = torch.matmul(directions, c2w[:3, :3].T)  # (H, W, 3)
+    rays_d = rays_d / (torch.norm(rays_d, dim=-1, keepdim=True) + 1e-8)
+    # The origin of all rays is the camera origin in world coordinate
+    rays_o = c2w[:3, 3].expand_as(rays_d)  # (H, W, 3)
+    return rays_o, rays_d
+
+def xray_to_pcd_torch(GenDepths, GenHits, GenNormals=None):
+    camera_angle_x = 0.8575560450553894
+    image_width = GenDepths.shape[-1]
+    image_height = GenDepths.shape[-2]
+    fx = 0.5 * image_width / math.tan(0.5 * camera_angle_x)
+
+    rays_screen_coords = torch.stack(torch.meshgrid(
+        torch.arange(image_height, dtype=torch.float32),
+        torch.arange(image_width, dtype=torch.float32)
+    ), -1).reshape(-1, 2)  # [h, w, 2]
+
+    grid = rays_screen_coords.reshape(image_height, image_width, 2)
+
+    cx = image_width / 2.0
+    cy = image_height / 2.0
+
+    i, j = grid[..., 1], grid[..., 0]
+
+    directions = torch.stack([(i - cx) / fx, -(j - cy) / fx, -torch.ones_like(i)], -1)  # (H, W, 3)
+
+    c2w = torch.eye(4, dtype=torch.float32)
+
+    rays_origins, ray_directions = get_rays_torch(directions, c2w)
+    rays_origins = rays_origins.unsqueeze(0).expand(GenDepths.shape[0], -1, -1, -1).to(GenDepths.device)
+    ray_directions = ray_directions.unsqueeze(0).expand(GenDepths.shape[0], -1, -1, -1).to(GenDepths.device)
+
+    GenDepths = GenDepths.permute(0, 2, 3, 1)
+    GenHits = GenHits.permute(0, 2, 3, 1)
+    
+    valid_index = GenHits[..., 0] > 0
+    rays_origins = rays_origins[valid_index]
+    ray_directions = ray_directions[valid_index]
+    GenDepths = GenDepths[valid_index]
+    xyz = rays_origins + ray_directions * GenDepths
+
+    if GenNormals is not None:
+        GenNormals = GenNormals.permute(0, 2, 3, 1)
+        normals = GenNormals[valid_index]
+        return xyz, normals
+    else:
+        return xyz
+
+
 
 
 def parse_args():
@@ -707,7 +814,27 @@ def main():
                 hit_loss = F.binary_cross_entropy_with_logits(model_pred[:, :, -1:], xray[:, :, -1:] * 0.5 + 0.5)
                 surface_loss = F.mse_loss(model_pred[:, :, :-1][H], xray[:, :, :-1][H])
                 # recon_loss = 0.01 * F.mse_loss(model_pred, xray)
-                loss = hit_loss + surface_loss
+
+                # pred normalization
+                GenDepths = (model_pred[:, :, 0:1] * 0.5 + 0.5) * (args.far - args.near) + args.near
+                GenHits = (model_pred[:, :, 7:8] > 0).float().detach()
+                GenDepths[GenHits == 0] = 0
+                GenDepths[GenDepths <= args.near] = 0
+                GenDepths[GenDepths >= args.far] = 0
+                GenDepths = GenDepths.reshape(-1, 1, args.height, args.width)
+                GenHits = GenHits.reshape(-1, 1, args.height, args.width)
+                Genpts = xray_to_pcd_torch(GenDepths, GenHits)
+
+                normal_loss = 0.001 * normal_similarity_loss(Genpts[None])
+
+                # # save pcd via o3d
+                # pcd = o3d.geometry.PointCloud()
+                # pcd.points = o3d.utility.Vector3dVector(Genpts.detach().cpu().numpy())
+                # pcd.normals = o3d.utility.Vector3dVector(Gennormals.detach().cpu().numpy())
+                # o3d.io.write_point_cloud(f"{args.output_dir}/step_{global_step}_gen.ply", pcd)
+                # import pdb; pdb.set_trace()
+
+                loss = hit_loss + surface_loss + normal_loss
 
                 # Gather the losses across all processes for logging (if we use distributed training).
                 avg_loss = accelerator.gather(
@@ -727,7 +854,8 @@ def main():
                 progress_bar.update(1)
                 accelerator.log({"train_loss": train_loss, 
                                  "hit_loss": hit_loss, 
-                                 "surface_loss": surface_loss}, step=global_step)
+                                 "surface_loss": surface_loss,
+                                 "normal_loss": normal_loss}, step=global_step)
                 train_loss = 0.0
 
                 if accelerator.is_main_process:
