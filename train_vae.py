@@ -43,17 +43,71 @@ from packaging import version
 from tqdm.auto import tqdm
 
 import diffusers
-from src.xray_decoder_casualvae import AutoencoderKLTemporalDecoder
+from diffusers import AutoencoderKLTemporalDecoder
 from diffusers.optimization import get_scheduler
 from diffusers.utils import check_min_version, deprecate, is_wandb_available, load_image
 from diffusers import AutoencoderKL
 import open3d as o3d
 from src.dataset import UpsamplerDataset
+from pytorch3d.ops import knn_points
 
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
 check_min_version("0.24.0.dev0")
 
 logger = get_logger(__name__, log_level="INFO")
+
+
+def normal_similarity_loss(points, k=20):
+    """
+    Calculate the loss function for normal similarity, which encourages neighboring points to have similar normals.
+    :param points: (B, N, 3) torch.Tensor, point cloud data
+    :param k: int, number of neighboring points
+    :return: torch.Tensor, normal similarity loss
+    """
+    B, N, _ = points.shape
+
+    # Perform kNN search using PyTorch3D
+    knn = knn_points(points, points, K=k, return_nn=True)
+    neighbors = knn.knn
+
+    centroid = torch.mean(neighbors, dim=2, keepdim=True)  # B x N x 1 x 3
+    neighbors_centered = neighbors - centroid  # B x N x k x 3
+
+    cov_matrix = torch.matmul(neighbors_centered.transpose(3, 2), neighbors_centered)  # B x N x 3 x 3
+    eigvals, eigvecs = torch.linalg.eigh(cov_matrix)  # B x N x 3 x 3
+
+    normals = eigvecs[:, :, :, 0]  # B x N x 3
+
+    # 计算相邻点法向量相似性损失
+    knn = knn_points(points, points, K=10, return_nn=True)
+    loss = compute_similarity_loss(normals, knn.idx)
+
+    return loss
+
+def compute_similarity_loss(normals, knn_idx):
+    """
+    Calculate the loss function for normal similarity, which encourages neighboring points to have similar normals.
+    :param normals: (B, N, 3) torch.Tensor, normal vectors
+    :param knn_idx: (B, N, k) torch.Tensor, k-nearest neighbor indices
+    :return: torch.Tensor, similarity loss
+    """
+    B, N, k = knn_idx.shape
+
+    # Get the normals of neighboring points
+    knn_idx = knn_idx.view(B, -1)  # Flatten the indices
+    neighbor_normals = normals.gather(1, knn_idx.unsqueeze(-1).expand(-1, -1, 3))  # Get neighbor normals
+    neighbor_normals = neighbor_normals.view(B, N, k, 3)  # Reshape back to neighbor normals shape
+
+    # Expand normals
+    normals_expanded = normals.unsqueeze(2).expand(-1, -1, k, -1)  # B x N x k x 3
+
+    # Calculate cosine similarity
+    cos_sim = F.cosine_similarity(normals_expanded, neighbor_normals, dim=-1)  # B x N x k
+
+    # Similarity loss, 1 minus cosine similarity is used as the loss since higher cosine similarity means more similarity
+    similarity_loss = 1 - cos_sim.abs()
+
+    return similarity_loss.mean()
 
 
 def get_rays(directions, c2w):
@@ -103,6 +157,59 @@ def xray_to_pcd(GenDepths, GenNormals, GenColors):
     xyz = rays_origins + ray_directions * GenDepths
 
     return xyz, normals, colors
+
+
+def get_rays_torch(directions, c2w):
+    # Rotate ray directions from camera coordinate to the world coordinate
+    rays_d = torch.matmul(directions, c2w[:3, :3].T)  # (H, W, 3)
+    rays_d = rays_d / (torch.norm(rays_d, dim=-1, keepdim=True) + 1e-8)
+    # The origin of all rays is the camera origin in world coordinate
+    rays_o = c2w[:3, 3].expand_as(rays_d)  # (H, W, 3)
+    return rays_o, rays_d
+
+def xray_to_pcd_torch(GenDepths, GenHits, GenNormals=None):
+    camera_angle_x = 0.8575560450553894
+    image_width = GenDepths.shape[-1]
+    image_height = GenDepths.shape[-2]
+    fx = 0.5 * image_width / math.tan(0.5 * camera_angle_x)
+
+    rays_screen_coords = torch.stack(torch.meshgrid(
+        torch.arange(image_height, dtype=torch.float32),
+        torch.arange(image_width, dtype=torch.float32)
+    ), -1).reshape(-1, 2)  # [h, w, 2]
+
+    grid = rays_screen_coords.reshape(image_height, image_width, 2)
+
+    cx = image_width / 2.0
+    cy = image_height / 2.0
+
+    i, j = grid[..., 1], grid[..., 0]
+
+    directions = torch.stack([(i - cx) / fx, -(j - cy) / fx, -torch.ones_like(i)], -1)  # (H, W, 3)
+
+    c2w = torch.eye(4, dtype=torch.float32)
+
+    rays_origins, ray_directions = get_rays_torch(directions, c2w)
+    rays_origins = rays_origins.unsqueeze(0).expand(GenDepths.shape[0], -1, -1, -1).to(GenDepths.device)
+    ray_directions = ray_directions.unsqueeze(0).expand(GenDepths.shape[0], -1, -1, -1).to(GenDepths.device)
+
+    GenDepths = GenDepths.permute(0, 2, 3, 1)
+    GenHits = GenHits.permute(0, 2, 3, 1)
+    
+    valid_index = GenHits[..., 0] > 0
+    rays_origins = rays_origins[valid_index]
+    ray_directions = ray_directions[valid_index]
+    GenDepths = GenDepths[valid_index]
+    xyz = rays_origins + ray_directions * GenDepths
+
+    if GenNormals is not None:
+        GenNormals = GenNormals.permute(0, 2, 3, 1)
+        normals = GenNormals[valid_index]
+        return xyz, normals
+    else:
+        return xyz
+
+
 
 
 def parse_args():
@@ -480,8 +587,6 @@ def main():
             repo_id = create_repo(
                 repo_id=args.hub_model_id or Path(args.output_dir).name, exist_ok=True, token=args.hub_token
             ).repo_id
-
-    vae_image = AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16)
     
     if args.pretrain_model is not None:
         vae = AutoencoderKLTemporalDecoder.from_pretrained(
@@ -489,10 +594,9 @@ def main():
         global_step = int(args.pretrain_model.split("-")[-1])
         first_epoch = 0
     else:
-        vae = AutoencoderKLTemporalDecoder.from_config("src/xray_decoder_casualvae.json")
+        vae = AutoencoderKLTemporalDecoder.from_config("src/xray_vae.json")
     
     vae.requires_grad_(True)
-    vae_image.requires_grad_(False)
 
     # For mixed precision training we cast the text_encoder and vae weights to half-precision
     # as these models are only used for inference, keeping weights in full precision is not required.
@@ -502,32 +606,28 @@ def main():
     elif accelerator.mixed_precision == "bf16":
         weight_dtype = torch.bfloat16
 
-    # Move image_encoder and vae to gpu and cast to weight_dtype
-    vae_image.to(accelerator.device, dtype=weight_dtype)
-
-    # `accelerate` 0.16.0 will have better support for customized saving
     if version.parse(accelerate.__version__) >= version.parse("0.16.0"):
         # create custom saving & loading hooks so that `accelerator.save_state(...)` serializes in a nice format
         def save_model_hook(models, weights, output_dir):
+            # if args.use_ema:
+            #     ema_vae.save_pretrained(os.path.join(output_dir, "vae_ema"))
 
-            for i, model in enumerate(models):
-                model.save_pretrained(os.path.join(output_dir, "vae"))
-
-                # make sure to pop weight so that corresponding model is not saved again
-                weights.pop()
+            vae = models[0]
+            vae.save_pretrained(os.path.join(output_dir, "vae"))
 
         def load_model_hook(models, input_dir):
-            for i in range(len(models)):
-                # pop models so that they are not loaded again
-                model = models.pop()
+            # if args.use_ema:
+            #     load_model = EMAModel.from_pretrained(os.path.join(input_dir, "vae_ema"), AutoencoderKL)
+            #     ema_vae.load_state_dict(load_model.state_dict())
+            #     ema_vae.to(accelerator.device)
+            #     del load_model
+            vae = models[0]
+            # load diffusers style into model
+            load_model = AutoencoderKLTemporalDecoder.from_pretrained(input_dir, subfolder="vae")
+            vae.register_to_config(**load_model.config)
 
-                # load diffusers style into model
-                load_model = AutoencoderKLTemporalDecoder.from_pretrained(
-                        input_dir, subfolder="vae", revision=args.revision)
-                model.register_to_config(**load_model.config)
-
-                model.load_state_dict(load_model.state_dict())
-                del load_model
+            vae.load_state_dict(load_model.state_dict())
+            del load_model
 
         accelerator.register_save_state_pre_hook(save_model_hook)
         accelerator.register_load_state_pre_hook(load_model_hook)
@@ -594,8 +694,8 @@ def main():
     )
 
     # Prepare everything with our `accelerator`.
-    vae, optimizer, lr_scheduler, train_dataloader = accelerator.prepare(
-        vae, optimizer, lr_scheduler, train_dataloader
+    vae, vae.encoder, vae.decoder, optimizer, lr_scheduler, train_dataloader = accelerator.prepare(
+        vae, vae.encoder, vae.decoder, optimizer, lr_scheduler, train_dataloader
     )
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
@@ -610,7 +710,7 @@ def main():
     # We need to initialize the trackers we use, and also store our configuration.
     # The trackers initializes automatically on the main process.
     if accelerator.is_main_process:
-        accelerator.init_trackers("SVDXtend", config=vars(args))
+        accelerator.init_trackers("X-Ray", config=vars(args))
 
     # Train!
     total_batch_size = args.per_gpu_batch_size * \
@@ -661,53 +761,54 @@ def main():
         for step, batch in enumerate(train_dataloader):
 
             with accelerator.accumulate(vae):
-                xray_lr = batch["xray_lr"].to(weight_dtype).to(
-                accelerator.device, non_blocking=True)
-
-                xray_lr = xray_lr + torch.randn_like(xray_lr) * random.uniform(0, 0.2)
-
                 xray = batch["xray"].to(weight_dtype).to(
                     accelerator.device, non_blocking=True
                 )
-                conditional_pixel_values = batch["image_values"].to(weight_dtype).to(
-                    accelerator.device, non_blocking=True)
 
-                # save xray_lr and conditional_pixel_values as images.
+                # save and conditional_pixel_values as images.
                 if global_step % 100 == 0 and accelerator.is_main_process:
                     os.makedirs(os.path.join(args.output_dir, "samples"), exist_ok=True)
-                    torchvision.utils.save_image(xray_lr[0, :, 0:1], os.path.join(args.output_dir, "samples", "depths_low.png"), normalize=True, nrow=4)
-                    torchvision.utils.save_image(xray_lr[0, :, 1:4], os.path.join(args.output_dir, "samples", "normals_low.png"), normalize=True, nrow=4)
-                    torchvision.utils.save_image(xray_lr[0, :, 4:7], os.path.join(args.output_dir, "samples", "colors_low.png"), normalize=True, nrow=4)
                     torchvision.utils.save_image(xray[0, :, 0:1], os.path.join(args.output_dir, "samples", "depths_high.png"), normalize=True, nrow=4)
                     torchvision.utils.save_image(xray[0, :, 1:4], os.path.join(args.output_dir, "samples", "normals_high.png"), normalize=True, nrow=4)
                     torchvision.utils.save_image(xray[0, :, 4:7], os.path.join(args.output_dir, "samples", "colors_high.png"), normalize=True, nrow=4)
-                    torchvision.utils.save_image(conditional_pixel_values[0:1], os.path.join(args.output_dir, "samples", "images.png"), normalize=True)
-                    # visual = torch.nn.functional.interpolate(xray_lr[0, :1, :1], (args.height, args.width))
-                    # visual = visual.clip(-1, 1)
-                    # visual = (visual + conditional_pixel_values[0:1]) / 2
-                    # torchvision.utils.save_image(visual, os.path.join(args.output_dir, "samples", "pixel_value_alighed.png"), normalize=True)
-
-                with torch.no_grad():
-                    conditional_pixel_values = conditional_pixel_values + torch.randn_like(conditional_pixel_values) * random.uniform(0, 0.2)
-                    conditional_latents = vae_image.encode(conditional_pixel_values).latent_dist.mode()
-
-                # Concatenate the `conditional_latents` with the `noisy_latents`.
-                conditional_latents = conditional_latents.unsqueeze(
-                    1).repeat(1, xray_lr.shape[1], 1, 1, 1)
-                xray_input = torch.cat(
-                    [xray_lr, conditional_latents], dim=2)
 
                 with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=True, enable_mem_efficient=False):
-                    xray_input = xray_input.flatten(0, 1)
-                    model_pred = vae(xray_input, num_frames=args.num_frames).sample
-                    model_pred = model_pred.reshape(-1, args.num_frames, *model_pred.shape[1:])
+                    xray_input = xray.flatten(0, 1)
+                    if isinstance(vae, torch.nn.parallel.DistributedDataParallel):
+                        posterior = vae.module.encode(xray_input).latent_dist
+                    else:
+                        posterior = vae.encode(xray_input).latent_dist
 
+                    z = posterior.sample() # Not mode()
+
+                    # if vae is dype of DistributedDataParallel
+                    if isinstance(vae, torch.nn.parallel.DistributedDataParallel):
+                        model_pred = vae.module.decode(z, num_frames=args.num_frames).sample
+                    else:
+                        model_pred = vae.decode(z, num_frames=args.num_frames).sample
+                    
+                    model_pred = model_pred.reshape(-1, args.num_frames, *model_pred.shape[1:])
+                
+                model_pred = model_pred.float()
                 xray = xray.float()
+
                 H = (xray[:, :, -1:] > 0.0).detach().expand(-1, -1, 7, -1, -1)
                 hit_loss = F.binary_cross_entropy_with_logits(model_pred[:, :, -1:], xray[:, :, -1:] * 0.5 + 0.5)
                 surface_loss = F.mse_loss(model_pred[:, :, :-1][H], xray[:, :, :-1][H])
-                recon_loss = 0.01 * F.mse_loss(model_pred, xray)
-                loss = hit_loss + surface_loss + recon_loss
+                kl_loss = 1e-6 * posterior.kl().mean()
+
+                # pred normalization
+                GenDepths = (model_pred[:, :, 0:1] * 0.5 + 0.5) * (args.far - args.near) + args.near
+                GenHits = (model_pred[:, :, -1:] > 0).float().detach()
+                GenDepths[GenHits == 0] = 0
+                GenDepths[GenDepths <= args.near] = 0
+                GenDepths[GenDepths >= args.far] = 0
+                GenDepths = GenDepths.reshape(-1, 1, args.height, args.width)
+                GenHits = GenHits.reshape(-1, 1, args.height, args.width)
+                Genpts = xray_to_pcd_torch(GenDepths, GenHits)
+                normal_loss = 0.001 * normal_similarity_loss(Genpts[None])
+
+                loss = hit_loss + surface_loss + kl_loss + normal_loss
 
                 # Gather the losses across all processes for logging (if we use distributed training).
                 avg_loss = accelerator.gather(
@@ -725,7 +826,11 @@ def main():
             # Checks if the accelerator has performed an optimization step behind the scenes
             if accelerator.sync_gradients:
                 progress_bar.update(1)
-                accelerator.log({"train_loss": train_loss}, step=global_step)
+                accelerator.log({"train_loss": train_loss, 
+                                 "hit_loss": hit_loss, 
+                                 "surface_loss": surface_loss,
+                                 "kl_loss": kl_loss,
+                                 "normal_loss": normal_loss}, step=global_step)
                 train_loss = 0.0
 
                 if accelerator.is_main_process:
@@ -779,43 +884,9 @@ def main():
                         with torch.no_grad():
                             val_image_paths = val_dataset.xray_paths[:args.num_validation_images]
                             for val_img_idx in range(args.num_validation_images):
-                                xray_lr = val_dataset[val_img_idx]["xray_lr"].to(accelerator.device, dtype=weight_dtype)[None]
-                                xray_lr = xray_lr + torch.randn_like(xray_lr) * random.uniform(0, 0.2)
-
-                                xray_lr_0 = xray_lr[0]
-                                GenDepths = (xray_lr_0[:, 0:1] * 0.5 + 0.5) * (args.far - args.near) + args.near
-                                GenHits = ((GenDepths > args.near) * (GenDepths < args.far)).float()
-                                GenDepths[GenHits == 0] = 0
-                                GenDepths[GenDepths <= args.near] = 0
-                                GenDepths[GenDepths >= args.far] = 0
-                                GenNormals = F.normalize(xray_lr_0[:, 1:4], dim=1)
-                                GenNormals[GenHits.repeat(1, 3, 1, 1) == 0] = 0
-                                GenColors = (xray_lr_0[:, 4:7] * 0.5 + 0.5).clip(0, 1)
-                                GenColors[GenHits.repeat(1, 3, 1, 1) == 0] = 0
-                                GenDepths = GenDepths.cpu().numpy()
-                                GenNormals = GenNormals.cpu().numpy()
-                                GenColors = GenColors.cpu().numpy()
-                                gen_pts, gen_normals, gen_colors = xray_to_pcd(GenDepths, GenNormals, GenColors)
-                                pcd = o3d.geometry.PointCloud()
-                                pcd.points = o3d.utility.Vector3dVector(gen_pts)
-                                pcd.normals = o3d.utility.Vector3dVector(gen_normals)
-                                pcd.colors = o3d.utility.Vector3dVector(gen_colors)
-                                o3d.io.write_point_cloud(f"{val_save_dir}/step_{global_step}_val_img_{val_img_idx}_input.ply", pcd)
-
-                                image_path = val_image_paths[val_img_idx].replace("xrays", "images").replace(".npz", ".png")
-                                image_val = load_image(image_path).convert("RGB").resize((args.width * 2, args.height * 2), Image.BILINEAR)
-                                image_val.save(f"{val_save_dir}/step_{global_step}_val_img_{val_img_idx}_original.png")
+                                xray = val_dataset[val_img_idx]["xray"].to(accelerator.device, dtype=weight_dtype)[None]
                                 
-                                conditional_pixel_values = (torchvision.transforms.ToTensor()(image_val).unsqueeze(0) * 2 - 1).to(accelerator.device, dtype=weight_dtype)
-                                conditional_latents = vae_image.encode(conditional_pixel_values).latent_dist.mode()
-
-                                # Concatenate the `conditional_latents` with the `noisy_latents`.
-                                conditional_latents = conditional_latents.unsqueeze(
-                                    1).repeat(1, xray_lr.shape[1], 1, 1, 1)
-                                xray_input = torch.cat(
-                                    [xray_lr, conditional_latents], dim=2)
-                                
-                                xray_input = xray_input.flatten(0, 1)
+                                xray_input = xray.flatten(0, 1)
                                 model_pred = vae(xray_input, num_frames=args.num_frames).sample
                                 outputs = model_pred.reshape(-1, args.num_frames, *model_pred.shape[1:])[0]
 
@@ -830,10 +901,7 @@ def main():
                                 GenNormals[GenHits.repeat(1, 3, 1, 1) == 0] = 0
                                 GenColors = outputs[:, 4:7] * 0.5 + 0.5
                                 GenColors[GenHits.repeat(1, 3, 1, 1) == 0] = 0
-                                # torchvision.utils.save_image(GenHits, f"{val_save_dir}/step_{global_step}_val_img_{val_img_idx}_hits.png", normalize=True, nrow=4)
-                                # torchvision.utils.save_image(GenDepths, f"{val_save_dir}/step_{global_step}_val_img_{val_img_idx}_depths.png", normalize=True, nrow=4)
-                                # torchvision.utils.save_image(GenNormals, f"{val_save_dir}/step_{global_step}_val_img_{val_img_idx}_normals.png", normalize=True, nrow=4)
-                                # torchvision.utils.save_image(GenColors, f"{val_save_dir}/step_{global_step}_val_img_{val_img_idx}_colors.png", normalize=True, nrow=4)
+                               
                                 GenDepths = GenDepths.cpu().numpy()
                                 GenNormals = GenNormals.cpu().numpy()
                                 GenColors = GenColors.cpu().numpy()

@@ -110,10 +110,10 @@ class UpsamplerDataset(Dataset):
         self.xray_paths = glob.glob(os.path.join(root_dir, "xrays/**/*.npz"), recursive=True)
         sorted(self.xray_paths)
         if phase == "train":
-            del self.xray_paths[::10]
+            del self.xray_paths[::30]
             random.shuffle(self.xray_paths)
         elif phase == "val":
-            self.xray_paths = self.xray_paths[::10]
+            self.xray_paths = self.xray_paths[::30]
         else:
             self.xray_paths = self.xray_paths
         self.num_samples = len(self.xray_paths)        

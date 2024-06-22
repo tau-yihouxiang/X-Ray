@@ -13,12 +13,10 @@ from tqdm import tqdm
 from src.metrics import chamfer_distance_and_f_score
 from scipy.sparse import csr_matrix
 import argparse
-from diffusers import AutoencoderKL
-from src.xray_decoder import AutoencoderKLTemporalDecoder
+from diffusers import AutoencoderKLTemporalDecoder
+from src.dataset import UpsamplerDataset
 import time
 from torch.utils.tensorboard import SummaryWriter
-
-
 
 
 def get_rays(directions, c2w):
@@ -77,70 +75,52 @@ def load_xray(xray_path):
     return restored_array
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser("X-Ray full Inference")
-    parser.add_argument("--exp_upsampler", type=str, default="Objaverse_80K_up_svd64_2", help="experiment name")
-    parser.add_argument("--exp_diffusion", type=str, default="Objaverse_XRay", help="experiment name")
+    parser.add_argument("--exp_vae", type=str, help="experiment name")
+    parser.add_argument("--data_root", type=str, default="Data/ShapeNetV2_Car", help="data root")
     args = parser.parse_args()
 
     near = 0.6
     far = 1.8
+    
     num_frames = 8
     height = 256
     width = 256
 
-    exp_upsampler = args.exp_upsampler
-    exp_diffusion = args.exp_diffusion
-    writer = SummaryWriter(f"Output/{exp_upsampler}/metrics")
-
-
-    if os.path.exists(f"Output/{exp_upsampler}/evaluate"):
-        shutil.rmtree(f"Output/{exp_upsampler}/evaluate")
-    os.makedirs(f"Output/{exp_upsampler}/evaluate", exist_ok=True)
-
-    vae_image = AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16).cuda()
-
-    image_paths = glob.glob(f"Output/{exp_diffusion}/evaluate/*.png")
-
-    os.makedirs(f"Output/{exp_upsampler}/evaluate", exist_ok=True)
-    progress_bar =  tqdm(range(len(image_paths)))
+    exp_vae = args.exp_vae
+    writer = SummaryWriter(f"Output/{exp_vae}/metrics")
 
     while True:
+        if os.path.exists(f"Output/{exp_vae}/evaluate"):
+            shutil.rmtree(f"Output/{exp_vae}/evaluate")
+
+        os.makedirs(f"Output/{exp_vae}/evaluate", exist_ok=True)
+        progress_bar =  tqdm(range(500))
+        
         # Get the most recent checkpoint
-        dirs = os.listdir(os.path.join("Output", exp_upsampler))
+        dirs = os.listdir(os.path.join("Output", exp_vae))
         dirs = [d for d in dirs if d.startswith("checkpoint")]
         dirs = sorted(dirs, key=lambda x: int(x.split("-")[1]))
         ckpt_name = dirs[-1]
-        print("restore from", f"Output/{exp_upsampler}/{ckpt_name}/vae")
-        vae = AutoencoderKLTemporalDecoder.from_pretrained(f"Output/{exp_upsampler}/{ckpt_name}", subfolder="vae").cuda()
+        print("restore from", f"Output/{exp_vae}/{ckpt_name}/vae")
+        vae = AutoencoderKLTemporalDecoder.from_pretrained(f"Output/{exp_vae}/{ckpt_name}", subfolder="vae").cuda()
 
         all_chamfer_distance = []
         all_f_score = []
-        for i in range(len(image_paths)):
-            image_path = image_paths[i]
-            uid = os.path.basename(image_path).replace(".png", "")
 
+        dataset = UpsamplerDataset(args.data_root, height, num_frames, near=near, far=far, phase="val")
+
+        for i in progress_bar:
+            image_path = dataset[i]["image_path"]
+            uid = image_path.split("/")[-2]
+
+            xray = dataset[i]["xray"].cuda()[None]
+            xray_input = xray.flatten(0, 1)
             with torch.no_grad():
-                xray_path = image_path.replace(".png", ".pt")
-                xrays = torch.load(xray_path)
-                xray_lr = xrays.clone().cuda()[None] # [8, 8, H, W]
-
-                image = load_image(image_path).resize((width * 2, height * 2), Image.BILINEAR).convert("RGB")
-                conditional_pixel_values = (torchvision.transforms.ToTensor()(image).unsqueeze(0) * 2 - 1).half().cuda()
-                conditional_latents = vae_image.encode(conditional_pixel_values).latent_dist.mode().float()
-
-                # Concatenate the `conditional_latents` with the `noisy_latents`.
-                conditional_latents = conditional_latents.unsqueeze(
-                    1).repeat(1, xray_lr.shape[1], 1, 1, 1).float()
-                xray_input = torch.cat(
-                    [xray_lr, conditional_latents], dim=2)
-                
-                xray_input = xray_input.flatten(0, 1)
                 model_pred = vae(xray_input, num_frames=num_frames).sample
-                outputs = model_pred.reshape(-1, num_frames, *model_pred.shape[1:])[0]
-                outputs = outputs.clamp(-1, 1) # clamp to [-1, 1]
+            outputs = model_pred.reshape(-1, num_frames, *model_pred.shape[1:])[0]
+            outputs = outputs.detach().clip(-1, 1)
 
-            image.save(f"Output/{exp_upsampler}/evaluate/{uid}.png")
             GenDepths = (outputs[:, 0:1] * 0.5 + 0.5) * (far - near) + near
             GenHits = (outputs[:, 7:8] > 0).float()
             GenDepths[GenHits == 0] = 0
@@ -160,23 +140,24 @@ if __name__ == "__main__":
                 GenDepths[i+1] = np.where(GenDepths_ori[i+1] < GenDepths_ori[i], 0, GenDepths_ori[i+1])
 
             gen_pts, gen_normals, gen_colors = xray_to_pcd(GenDepths, GenNormals, GenColors)
-            gen_pts = gen_pts - np.mean(gen_pts, axis=0)
             pcd = o3d.geometry.PointCloud()
             pcd.points = o3d.utility.Vector3dVector(gen_pts)
             pcd.normals = o3d.utility.Vector3dVector(gen_normals)
             pcd.colors = o3d.utility.Vector3dVector(gen_colors)
-            o3d.io.write_point_cloud(f"Output/{exp_upsampler}/evaluate/{uid}_prd.ply", pcd)
+            o3d.io.write_point_cloud(f"Output/{exp_vae}/evaluate/{uid}_prd.ply", pcd)
 
-            shutil.copy(image_path.replace(".png", "_prd.ply"), f"Output/{exp_upsampler}/evaluate/{uid}_lr_prd.ply")
+            gt_path = image_path.replace("images", "xrays").replace(".png", ".npz")
+            xray_gt = load_xray(gt_path)[:8]
+            GtDepths = xray_gt[:, 0:1]
+            GtNormals = xray_gt[:, 1:4]
+            GtColors = xray_gt[:, 4:7]
+            gt_pts, gt_normals, gt_colors = xray_to_pcd(GtDepths, GtNormals, GtColors)
 
-            # copy prd ply to the folder
-            gt_pcd = o3d.io.read_point_cloud(image_path.replace(".png", "_gt.ply"))
-            gt_pts = np.asarray(gt_pcd.points)
-            gt_pts = gt_pts - np.mean(gt_pts, axis=0)
-
-            # update gt pts
-            gt_pcd.points = o3d.utility.Vector3dVector(gt_pts)
-            o3d.io.write_point_cloud(f"Output/{exp_upsampler}/evaluate/{uid}_gt.ply", gt_pcd)
+            pcd_gt = o3d.geometry.PointCloud()
+            pcd_gt.points = o3d.utility.Vector3dVector(gt_pts)
+            pcd_gt.normals = o3d.utility.Vector3dVector(gt_normals)
+            pcd_gt.colors = o3d.utility.Vector3dVector(gt_colors)
+            o3d.io.write_point_cloud(f"Output/{exp_vae}/evaluate/{uid}_gt.ply", pcd_gt)
 
             chamfer_distance, f_score = chamfer_distance_and_f_score(gt_pts, gen_pts, threshold=0.01)
             all_chamfer_distance += [chamfer_distance]
@@ -197,4 +178,3 @@ if __name__ == "__main__":
         # sleep for 30 minutes
         time.sleep(60 * 30)
         print("Sleeping for 30 minutes")
-

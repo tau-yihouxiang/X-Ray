@@ -1,16 +1,16 @@
 #/bin/bash
 
 export MODEL_NAME="stabilityai/stable-video-diffusion-img2vid"
-export OUTPUT_DIR="Output/ShapeNetV2_Car_upsampler_large_normal"
+export OUTPUT_DIR="Output/ShapeNetV2_Car_VAE_Normal"
 export INSTANCE_DIR="Data/ShapeNetV2_Car"
 export NUM_GPUS=2
 
 CUDA_VISIBLE_DEVICES=1,2 accelerate launch \
-    --main_process_port=29501 --num_processes=${NUM_GPUS} train_upsampler.py \
+    --main_process_port=29501 --num_processes=${NUM_GPUS} train_vae.py \
     --pretrained_model_name_or_path=${MODEL_NAME} \
     --data_root=${INSTANCE_DIR} \
     --output_dir=${OUTPUT_DIR} \
-    --per_gpu_batch_size=1 --gradient_accumulation_steps=1 \
+    --per_gpu_batch_size=2 --gradient_accumulation_steps=1 \
     --max_train_steps=10000000 \
     --width=256 \
     --height=256 \
@@ -23,4 +23,7 @@ CUDA_VISIBLE_DEVICES=1,2 accelerate launch \
     --num_validation_images=5 \
     --near=0.6 \
     --far=1.8 \
+    --mixed_precision fp16 \
     --resume_from_checkpoint="latest"
+
+    # --pretrain_model Output/ShapeNetV2_Car_VAE/checkpoint-0

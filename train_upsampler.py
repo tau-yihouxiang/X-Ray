@@ -57,7 +57,7 @@ check_min_version("0.24.0.dev0")
 logger = get_logger(__name__, log_level="INFO")
 
 
-def normal_similarity_loss(points, k=20):
+def normal_similarity_loss(points, k=30):
     """
     Calculate the loss function for normal similarity, which encourages neighboring points to have similar normals.
     :param points: (B, N, 3) torch.Tensor, point cloud data
@@ -77,9 +77,10 @@ def normal_similarity_loss(points, k=20):
     eigvals, eigvecs = torch.linalg.eigh(cov_matrix)  # B x N x 3 x 3
 
     normals = eigvecs[:, :, :, 0]  # B x N x 3
+    normals = F.normalize(normals, p=2, dim=-1)  # B x N x 3
 
     # 计算相邻点法向量相似性损失
-    knn = knn_points(points, points, K=10, return_nn=True)
+    knn = knn_points(points, points, K=k//2, return_nn=True)
     loss = compute_similarity_loss(normals, knn.idx)
 
     return loss
@@ -717,7 +718,7 @@ def main():
     # We need to initialize the trackers we use, and also store our configuration.
     # The trackers initializes automatically on the main process.
     if accelerator.is_main_process:
-        accelerator.init_trackers("SVDXtend", config=vars(args))
+        accelerator.init_trackers("X-Ray", config=vars(args))
 
     # Train!
     total_batch_size = args.per_gpu_batch_size * \
@@ -813,7 +814,6 @@ def main():
                 H = (xray[:, :, -1:] > 0.0).detach().expand(-1, -1, 7, -1, -1)
                 hit_loss = F.binary_cross_entropy_with_logits(model_pred[:, :, -1:], xray[:, :, -1:] * 0.5 + 0.5)
                 surface_loss = F.mse_loss(model_pred[:, :, :-1][H], xray[:, :, :-1][H])
-                # recon_loss = 0.01 * F.mse_loss(model_pred, xray)
 
                 # pred normalization
                 GenDepths = (model_pred[:, :, 0:1] * 0.5 + 0.5) * (args.far - args.near) + args.near
@@ -825,7 +825,7 @@ def main():
                 GenHits = GenHits.reshape(-1, 1, args.height, args.width)
                 Genpts = xray_to_pcd_torch(GenDepths, GenHits)
 
-                normal_loss = 0.001 * normal_similarity_loss(Genpts[None])
+                normal_loss = 0.002 * normal_similarity_loss(Genpts[None])
 
                 # # save pcd via o3d
                 # pcd = o3d.geometry.PointCloud()

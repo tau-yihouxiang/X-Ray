@@ -1,0 +1,24 @@
+{
+    "_class_name": "AutoencoderKLTemporalDecoder",
+    "_diffusers_version": "0.24.0.dev0",
+    "_name_or_path": "/home/suraj_huggingface_co/.cache/huggingface/hub/models--diffusers--svd-test/snapshots/b9d5dcd269e2f7bff9f98a4907b8c69b7acd555d/vae",
+    "block_out_channels": [
+      128,
+      128,
+      256,
+      512
+    ],
+    "down_block_types": [
+      "DownEncoderBlock2D",
+      "DownEncoderBlock2D",
+      "DownEncoderBlock2D",
+      "DownEncoderBlock2D"
+    ],
+    "force_upcast": true,
+    "in_channels": 8,
+    "latent_channels": 4,
+    "layers_per_block": 2,
+    "out_channels": 8,
+    "sample_size": 768,
+    "scaling_factor": 0.18215
+  }
