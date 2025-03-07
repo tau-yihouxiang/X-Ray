@@ -108,12 +108,12 @@ $ python evaluate_upsampler.py --exp_diffusion Objaverse_XRay --exp_upsampler Ob
 ## Citation
 If you find this work useful for your research, please cite our paper:
 ```
-@inproceedings{
-hu2024xray,
-title={X-Ray: A Sequential 3D Representation For Generation},
-author={Tao Hu and Wenhang Ge and Yuyang Zhao and Gim Hee Lee},
-booktitle={The Thirty-eighth Annual Conference on Neural Information Processing Systems},
-year={2024},
-url={https://openreview.net/forum?id=36tMV15dPO}
+@article{hu2024x,
+  title={X-ray: A sequential 3d representation for generation},
+  author={Hu, Tao and Ge, Wenhang and Zhao, Yuyang and Lee, Gim Hee},
+  journal={Advances in Neural Information Processing Systems},
+  volume={37},
+  pages={136193--136219},
+  year={2024}
 }
 ```
